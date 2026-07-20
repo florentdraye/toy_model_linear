@@ -26,7 +26,7 @@ python -u train.py \
   --lr 1e-3 \
   --weight-decay 1.0 \
   --batch-size 4000 \
-  --n-epochs 40 \
+  --n-epochs 60 \
   --mlp-activation relu2 \
   --n-blocks 4 \
   --balance-train-layer "$BALANCE_TRAIN_LAYER" \
