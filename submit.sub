@@ -1,0 +1,21 @@
+# Generic single-H100 HTCondor submission. Pass the script with -append:
+#   condor_submit -append 'arguments = run_fast.sh' submit.sub
+#   condor_submit -append 'arguments = run_adv_probe.sh' submit.sub
+universe        = vanilla
+executable      = /bin/bash
+# arguments overridden per-submit via -append (e.g. arguments = run_fast.sh)
+
+request_gpus    = 1
+request_cpus    = 10
+request_memory  = 100 GB
+requirements    = (CUDACapability == 9.0)
+
+stream_output   = true
+stream_error    = true
+
+output          = logs/$(Cluster).$(Process).out
+error           = logs/$(Cluster).$(Process).err
+log             = logs/$(Cluster).$(Process).log
+
+initialdir      = /lustre/home/fdraye/projects/toy_model_linear
+queue

@@ -1,0 +1,152 @@
+% Add to the preamble of the main document:
+%   \usepackage{tikz}
+%   \usetikzlibrary{positioning, arrows.meta}
+%
+% Then insert the section below anywhere before the "Negative Results" section.
+
+\section{The Toy Model}
+\label{sec:toy-model}
+
+We study a controlled sequence-classification task defined on a random layered
+directed graph. The graph has $L+1$ node layers $V_0, V_1, \dots, V_L$, with
+$|V_0|=1$ (a single seed node) and $|V_\ell| = N$ for $\ell\geq 1$. Each node in
+layer $\ell < L$ has exactly $k$ outgoing edges, sampled without replacement
+from $V_{\ell+1}$. The set of all paths from the seed to layer $L$ defines the
+dataset. Each example is an edge sequence
+\begin{equation*}
+    x = (e_0, e_1, \dots, e_{L-1}) \in \{0, 1, \dots, k-1\}^{L},
+\end{equation*}
+where $e_\ell \in \{0, \dots, k-1\}$ selects one of the $k$ outgoing edges of
+the node reached at layer $\ell$. The label is the identity of the node reached
+in $V_L$:
+\begin{equation*}
+    y = z_L(x) \in V_L.
+\end{equation*}
+
+Along each path, the intermediate nodes $z_1(x), \dots, z_{L-1}(x)$ are
+\emph{latent variables}: each $z_\ell$ is a deterministic function of the
+prefix $(e_0, \dots, e_{\ell-1})$, but the model only observes the raw edge
+sequence and must implicitly recover the $z_\ell$ in order to compose them
+into the final label $z_L$.
+
+\begin{figure}[h]
+\centering
+\begin{tikzpicture}[
+    every node/.style={circle, draw, minimum size=6mm, inner sep=0pt,
+                       font=\scriptsize},
+    edge/.style={-{Latex[length=1.6mm]}, gray!55, thin},
+    hi/.style={-{Latex[length=1.8mm]}, red!80!black, very thick},
+    lbl/.style={draw=none, font=\itshape}
+]
+% --- Nodes: 5 layers, 1 -> 4 -> 4 -> 4 -> 4, k = 2 ---
+\node (a0) at (0, 0)   {$s$};
+
+\node (b0) at (2, 1.8) {$z_1^{(0)}$};
+\node (b1) at (2, 0.6) {$z_1^{(1)}$};
+\node (b2) at (2,-0.6) {$z_1^{(2)}$};
+\node (b3) at (2,-1.8) {$z_1^{(3)}$};
+
+\node (c0) at (4, 1.8) {};
+\node (c1) at (4, 0.6) {};
+\node (c2) at (4,-0.6) {};
+\node (c3) at (4,-1.8) {};
+
+\node (d0) at (6, 1.8) {};
+\node (d1) at (6, 0.6) {};
+\node (d2) at (6,-0.6) {};
+\node (d3) at (6,-1.8) {};
+
+\node (e0) at (8, 1.8) {};
+\node (e1) at (8, 0.6) {};
+\node (e2) at (8,-0.6) {$y$};
+\node (e3) at (8,-1.8) {};
+
+% --- Random edges (k = 2 per node, chosen for a clean illustration) ---
+\draw[edge] (a0) -- (b0);  \draw[edge] (a0) -- (b2);
+\draw[edge] (b0) -- (c1);  \draw[edge] (b0) -- (c2);
+\draw[edge] (b1) -- (c0);  \draw[edge] (b1) -- (c3);
+\draw[edge] (b2) -- (c1);  \draw[edge] (b2) -- (c3);
+\draw[edge] (b3) -- (c0);  \draw[edge] (b3) -- (c2);
+\draw[edge] (c0) -- (d0);  \draw[edge] (c0) -- (d1);
+\draw[edge] (c1) -- (d2);  \draw[edge] (c1) -- (d3);
+\draw[edge] (c2) -- (d0);  \draw[edge] (c2) -- (d3);
+\draw[edge] (c3) -- (d1);  \draw[edge] (c3) -- (d2);
+\draw[edge] (d0) -- (e0);  \draw[edge] (d0) -- (e2);
+\draw[edge] (d1) -- (e1);  \draw[edge] (d1) -- (e3);
+\draw[edge] (d2) -- (e0);  \draw[edge] (d2) -- (e1);
+\draw[edge] (d3) -- (e2);  \draw[edge] (d3) -- (e3);
+
+% --- One highlighted example path ---
+\draw[hi] (a0) -- node[above, sloped, draw=none, font=\tiny]{$e_0$} (b0);
+\draw[hi] (b0) -- node[above, sloped, draw=none, font=\tiny]{$e_1$} (c2);
+\draw[hi] (c2) -- node[above, sloped, draw=none, font=\tiny]{$e_2$} (d3);
+\draw[hi] (d3) -- node[above, sloped, draw=none, font=\tiny]{$e_3$} (e2);
+
+% --- Layer labels ---
+\node[lbl] at (0,-2.8) {$V_0$};
+\node[lbl] at (2,-2.8) {$V_1$};
+\node[lbl] at (4,-2.8) {$V_2$};
+\node[lbl] at (6,-2.8) {$V_3$};
+\node[lbl] at (8,-2.8) {$V_L$};
+\end{tikzpicture}
+\caption{A small instance with $L=4$ layers and $k=2$ edges per node. Each node
+in $V_\ell$ has $k$ outgoing edges to $V_{\ell+1}$. The model observes the
+edge sequence $(e_0, e_1, e_2, e_3)$ along a path (red) and predicts the final
+node $y\in V_L$. The intermediate nodes visited in $V_1, V_2, V_3$ are the
+latent variables $z_1, z_2, z_3$ whose emergence we probe.}
+\label{fig:toy-graph}
+\end{figure}
+
+\subsection*{Causal geometry of the latents}
+
+A path is fully specified by its edge sequence $x$, and the label $y$ is a
+composition of $L$ successive edge lookups. This causal structure has two
+immediate consequences for probing:
+
+\begin{itemize}
+    \item \textbf{Position.} The latent $z_\ell$ depends only on
+    $(e_0, \dots, e_{\ell-1})$. In a causal transformer, information about
+    $z_\ell$ can therefore first appear at input position $p = \ell - 1$ and
+    only propagate to later positions through attention.
+
+    \item \textbf{Depth.} Since $z_\ell$ composes $\ell$ successive edges, it
+    typically requires at least $\lceil \log_2 \ell \rceil$ blocks of nonlinear
+    composition to be resolved from the raw edge embeddings. In practice we
+    observe that deeper graph latents emerge at deeper transformer depths.
+\end{itemize}
+
+\subsection*{Model and probing objective}
+
+We train a small transformer $h_\theta : \{0,\dots,k-1\}^L \to \Delta(V_L)$ to
+predict $y$ from $x$. The residual stream at transformer depth $d$ and
+sequence position $p$ produces a vector $h_i^{(d,p)}(\theta)\in\mathbb{R}^m$
+for each example $i$. This yields a grid of $(D+1)\times L$ candidate probe
+sites, where $D$ is the number of transformer blocks.
+
+Given a target graph layer $\ell$, a probe on cell $(d, p)$ is a classifier
+$f: \mathbb{R}^m \to V_\ell$ trained on
+$\{(h_i^{(d, p)}, z_\ell(x_i))\}_{i \in \text{train}}$ and evaluated on a
+held-out split. We compare three families of probe:
+\begin{itemize}
+    \item \emph{Difference-of-means} (DoM), the rank-$1$ direction
+    $w_c = \mu_c^+ - \mu_c^-$;
+    \item \emph{Multinomial logistic regression}, a full-rank linear classifier;
+    \item \emph{One-hidden-layer MLP}, a nonlinear classifier.
+\end{itemize}
+
+Comparing these three probes across training reveals when a latent becomes
+decodable and whether it is first acquired in a linear or a nonlinear form.
+The gap between DoM and logistic regression isolates whether the linearly
+decodable content sits along a single mean-difference direction or is spread
+across the full covariance structure. The gap between logistic regression and
+MLP isolates whether an additional nonlinear coordinate change is required.
+
+\subsection*{Default configuration}
+
+Unless stated otherwise, the experiments use $L = 6$, $|V_\ell| = 100$ for
+$\ell \geq 1$, and $k = 10$, giving $k^L = 10^6$ training paths. The
+transformer has $4$ blocks with a learned positional embedding, causal
+self-attention, and ReLU$^2$ MLPs; the classifier reads the residual at the
+last sequence position. Probes are refit from scratch on the current model
+every $50$ training steps and evaluated on a fixed test split, so a probe
+curve $\{\mathrm{acc}(d, p; t)\}$ can be plotted against training step $t$.

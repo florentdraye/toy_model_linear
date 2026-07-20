@@ -1,0 +1,32 @@
+# Python
+__pycache__/
+*.py[cod]
+*.egg-info/
+.venv/
+venv/
+
+# Training artifacts & experiments
+runs/
+logs/
+*.pt
+*.pth
+*.ckpt
+*.png
+*.pdf
+*.log
+
+# Editors / IDE
+.vscode/
+.idea/
+*.swp
+
+# OS
+.DS_Store
+
+# Claude local settings
+.claude/
+
+# HTCondor
+*.condor_log
+*.out
+*.err

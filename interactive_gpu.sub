@@ -1,0 +1,15 @@
+universe   = vanilla
+executable = /bin/bash
+arguments  = -l  # Launches a login shell
+request_gpus = 1
+request_cpus = 10
+request_memory = 100 GB
+requirements = (CUDACapability == 9.0)
+
+# Run the job interactively
++InteractiveJob = True
++IsDocker = False
+stream_output = True
+stream_error  = True
+
+queue

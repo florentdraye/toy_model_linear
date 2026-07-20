@@ -1,0 +1,20 @@
+# 2000-step relu2 + DoM probes only. Submit with:
+#   condor_submit_bid 2000 submit_2k_relu2_dom.sub
+universe        = vanilla
+executable      = /bin/bash
+arguments       = run_2k_relu2_dom.sh
+
+request_gpus    = 1
+request_cpus    = 10
+request_memory  = 100 GB
+requirements    = (CUDACapability == 9.0)
+
+stream_output   = true
+stream_error    = true
+
+output          = logs/$(Cluster).$(Process).out
+error           = logs/$(Cluster).$(Process).err
+log             = logs/$(Cluster).$(Process).log
+
+initialdir      = /lustre/home/fdraye/projects/toy_model_linear
+queue

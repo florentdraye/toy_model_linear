@@ -1,0 +1,19 @@
+# Submit probe.py on a trained checkpoint. Pass the ckpt path via -append:
+#   condor_submit -append 'arguments = probe.py --ckpt runs/.../ckpt.pt' submit_probe.sub
+universe        = vanilla
+executable      = /home/fdraye/.pyenv/versions/3.11.0/bin/python
+
+request_gpus    = 1
+request_cpus    = 4
+request_memory  = 40 GB
+requirements    = (CUDACapability == 9.0)
+
+stream_output   = true
+stream_error    = true
+
+output          = logs/probe.$(Cluster).$(Process).out
+error           = logs/probe.$(Cluster).$(Process).err
+log             = logs/probe.$(Cluster).$(Process).log
+
+initialdir      = /lustre/home/fdraye/projects/toy_model_linear
+queue
