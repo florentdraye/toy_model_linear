@@ -408,6 +408,9 @@ class ToyTransformer(nn.Module):
         else:
             raise ValueError(f"unknown head_type {cfg.head_type!r}")
         if cfg.identity_unembed:
+            assert not cfg.frozen_suo_unembed, (
+                "identity_unembed and frozen_suo_unembed are mutually exclusive"
+            )
             assert cfg.d_model == cfg.n_classes, (
                 f"identity_unembed requires d_model ({cfg.d_model}) == n_classes ({cfg.n_classes})"
             )
@@ -416,6 +419,19 @@ class ToyTransformer(nn.Module):
         self.apply(lambda m: self._init_weights(m, cfg.init_std))
         if cfg.suo_init:
             apply_suo_init_to_blocks(self)
+        if cfg.frozen_suo_unembed:
+            assert isinstance(self.head, nn.Linear), (
+                "frozen_suo_unembed requires head_type='linear'"
+            )
+            with torch.no_grad():
+                rows, cols = self.head.weight.shape
+                self.head.weight.copy_(
+                    suo_initialize(rows, cols, device=self.head.weight.device)
+                )
+                if self.head.bias is not None:
+                    self.head.bias.zero_()
+            for p in self.head.parameters():
+                p.requires_grad = False
         # Freeze the V MLPs (random nonlinear projection inside each attention block)
         if cfg.attn_v_mlp and cfg.freeze_attn_v_mlp:
             for block in self.blocks:

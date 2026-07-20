@@ -70,6 +70,9 @@ def main():
     p.add_argument("--identity-unembed", action="store_true",
                    help="Replace ln_f and head with nn.Identity (logits = h[:, -1]). "
                         "Requires d_model == n_classes.")
+    p.add_argument("--frozen-suo-unembed", action="store_true",
+                   help="Initialize the linear unembedding semi-orthogonally and freeze "
+                        "its weight and bias. For n_classes > d_model, W.T @ W = I.")
     # ---- train ----
     p.add_argument("--batch-size", type=int, default=256)
     p.add_argument("--lr", type=float, default=1e-2)
@@ -193,6 +196,7 @@ def main():
         head_type=args.head_type,
         head_rank=args.head_rank,
         identity_unembed=args.identity_unembed,
+        frozen_suo_unembed=args.frozen_suo_unembed,
     )
     train_cfg = TrainConfig(
         batch_size=args.batch_size,

@@ -55,6 +55,8 @@ class ModelConfig:
     # If True, replace both ln_f and head with nn.Identity so logits = h[:, -1].
     # Requires d_model == n_classes.
     identity_unembed: bool = False
+    # If True, initialize the linear unembedding semi-orthogonally and freeze it.
+    frozen_suo_unembed: bool = False
     # Frozen MLP on top of the transformer, between ln_f and the trainable head.
     frozen_mlp_layers: int = 0      # 0 disables the MLP
     frozen_mlp_hidden: int = -1     # -1 -> d_model

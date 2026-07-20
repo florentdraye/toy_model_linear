@@ -51,6 +51,8 @@ def main():
     cmp_layers = [ell for ell in args.rep_compare_layers if ell in layers]
     if cmp_layers:
         _render_rep_across_layers(cmp_layers, payload, steps, out_dir)
+        _render_final_probe_across_layers(cmp_layers, payload, steps, out_dir)
+        _render_final_probe_across_model_depth(cmp_layers, payload, out_dir)
 
 
 def _render_layer(ell, payload, steps, out_dir):
@@ -163,6 +165,76 @@ def _render_rep_across_layers(layers, payload, steps, out_dir):
     fig.savefig(plot_path, dpi=140)
     plt.close(fig)
     print(f"saved plot -> {plot_path}  (layers {layers})")
+
+
+def _render_final_probe_across_layers(layers, payload, steps, out_dir):
+    """One panel: final-applied DoM representation probe for each graph layer."""
+    steps_np = steps.numpy()
+    dom_curves = payload.get("final_dom_top1_curve", {}).get("rep", {})
+
+    fig, ax = plt.subplots(figsize=(9, 5))
+    cmap = plt.get_cmap("viridis")
+    n = max(len(layers) - 1, 1)
+    for i, ell in enumerate(layers):
+        curve = dom_curves.get(ell)
+        if curve is None or curve.numel() == 0:
+            continue
+        color = cmap(i / n)
+        final_top1 = payload["final_top1_rep"][ell]
+        width = final_top1.shape[1]
+        best_idx = final_top1.reshape(-1).argmax().item()
+        d_star, p_star = best_idx // width, best_idx % width
+        ax.plot(
+            steps_np[:curve.shape[0]], curve.numpy(),
+            color=color, lw=2.2,
+            label=f"Layer {ell} (d={d_star}, p={p_star}) — {curve[-1].item():.3f}",
+        )
+
+    ax.set_xlabel("training step")
+    ax.set_ylabel("top-1 accuracy")
+    ax.set_ylim(0, 1)
+    ax.set_title("Final representation probe performance across graph layers")
+    ax.legend(loc="best", fontsize=9)
+    ax.grid(True, alpha=0.3)
+
+    plot_path = out_dir / "probe_final_rep_layers_2_to_5.png"
+    fig.tight_layout()
+    fig.savefig(plot_path, dpi=160)
+    plt.close(fig)
+    print(f"saved plot -> {plot_path}  (layers {layers}, final DoM probe only)")
+
+
+def _render_final_probe_across_model_depth(layers, payload, out_dir):
+    """Final-checkpoint probe accuracy vs transformer depth for graph layers."""
+    fig, ax = plt.subplots(figsize=(9, 5))
+    cmap = plt.get_cmap("viridis")
+    n = max(len(layers) - 1, 1)
+
+    for i, ell in enumerate(layers):
+        # (model depth, sequence position); select the best position separately
+        # at each depth so the curve measures the strongest representation there.
+        depth_position = payload["final_top1_rep"][ell]
+        depth_curve = depth_position.max(dim=1).values
+        model_layers = torch.arange(depth_curve.numel())
+        ax.plot(
+            model_layers.numpy(), depth_curve.numpy(),
+            color=cmap(i / n), marker="o", lw=2.2,
+            label=f"Graph layer {ell}",
+        )
+
+    ax.set_xlabel("model layer (transformer depth)")
+    ax.set_ylabel("final-probe top-1 accuracy")
+    ax.set_xticks(range(payload["final_top1_rep"][layers[0]].shape[0]))
+    ax.set_ylim(0, 1)
+    ax.set_title("Final representation probe across model layers")
+    ax.legend(loc="best", fontsize=9)
+    ax.grid(True, alpha=0.3)
+
+    plot_path = out_dir / "probe_final_graph_layers_2_to_5_across_model_layers.png"
+    fig.tight_layout()
+    fig.savefig(plot_path, dpi=160)
+    plt.close(fig)
+    print(f"saved plot -> {plot_path}  (x-axis=model layer, graph layers={layers})")
 
 
 if __name__ == "__main__":
