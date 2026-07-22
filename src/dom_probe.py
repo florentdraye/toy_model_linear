@@ -468,6 +468,9 @@ class DoMProbeTracker:
             key: {} for key in
             ("rep", "diff", "deriv", "deriv10", "deriv50", "loss_grad")
         }
+        # Cross-feature curve: fit the final multiclass DoM on h(T), then use
+        # that same frozen direction to classify -dL/dh(t) at every checkpoint.
+        self.final_rep_dom_on_loss_grad_curve: Dict[int, torch.Tensor] = {}
 
         # Fixed per-class probe batches for the virtual-grad analysis.
         # probe_grad_batches[frac][ell] is (K, batch_size) of indices into
@@ -1855,6 +1858,12 @@ class DoMProbeTracker:
                     test_snapshots, W_dom_mc, ell, d_star, p_star)
                 self.final_lr_top1_curve[name][ell] = self._final_applied_curve(
                     test_snapshots, W_lr, ell, d_star, p_star)
+                if name == "rep" and self.loss_grad_test_history:
+                    self.final_rep_dom_on_loss_grad_curve[ell] = (
+                        self._final_applied_curve(
+                            self.loss_grad_test_history, W_dom_mc,
+                            ell, d_star, p_star)
+                    )
 
             self.norm_diff_active[ell], self.norm_diff_inactive[ell] = (
                 norm_diff_a, norm_diff_i
@@ -2026,6 +2035,9 @@ class DoMProbeTracker:
                 for name in ("rep", "diff", "deriv", "deriv10", "deriv50",
                              "loss_grad")
             }
+            payload["final_rep_dom_on_loss_grad_curve"] = dict(
+                self.final_rep_dom_on_loss_grad_curve
+            )
             payload["raw_dot_jvp_update_active"] = dict(self.raw_dot_jvp_update_active)
             payload["raw_dot_jvp_update_inactive"] = dict(self.raw_dot_jvp_update_inactive)
             payload["dot_ntk_pair"] = {

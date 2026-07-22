@@ -49,6 +49,7 @@ def main():
         _render_layer(ell, payload, steps, out_dir)
         _render_loss_grad_vs_rep(ell, payload, steps, out_dir)
         _render_final_loss_grad_vs_rep(ell, payload, steps, out_dir)
+        _render_final_rep_probe_on_loss_grad(ell, payload, steps, out_dir)
 
     cmp_layers = [ell for ell in args.rep_compare_layers if ell in layers]
     if cmp_layers:
@@ -215,6 +216,46 @@ def _render_final_loss_grad_vs_rep(ell, payload, steps, out_dir):
     fig.savefig(plot_path, dpi=160)
     plt.close(fig)
     print(f"saved plot -> {plot_path}  (layer {ell}, final-fixed probes)")
+
+
+def _render_final_rep_probe_on_loss_grad(ell, payload, steps, out_dir):
+    """Apply the final h(T) DoM probe to both h(t) and -dL/dh(t)."""
+    rep = payload.get("final_dom_top1_curve", {}).get("rep", {}).get(ell)
+    loss_grad = payload.get("final_rep_dom_on_loss_grad_curve", {}).get(ell)
+    if rep is None or loss_grad is None or rep.numel() == 0 or loss_grad.numel() == 0:
+        print(f"layer {ell}: final h-probe-on-loss-gradient curve unavailable; skipping")
+        return
+
+    count = min(rep.numel(), loss_grad.numel(), steps.numel())
+    x = steps[:count].numpy()
+    final_top1 = payload["final_top1_rep"][ell]
+    width = final_top1.shape[1]
+    best_idx = final_top1.reshape(-1).argmax().item()
+    d_star, p_star = best_idx // width, best_idx % width
+    chance = 1.0 / payload["reachable_classes"][ell].numel()
+
+    fig, ax = plt.subplots(figsize=(9, 5))
+    ax.plot(x, rep[:count].numpy(), lw=2.2, color="C0",
+            label=r"final $h(T)$ DoM applied to $h(t)$")
+    ax.plot(x, loss_grad[:count].numpy(), lw=2.2, color="C5",
+            label=r"same final $h(T)$ DoM applied to $-\partial L/\partial h(t)$")
+    ax.axhline(chance, color="grey", ls=":", lw=1,
+               label=f"chance ({chance:.3f})")
+    ax.set_xlabel("training step")
+    ax.set_ylabel("held-out 100-class top-1 accuracy")
+    ax.set_ylim(0, 1)
+    ax.set_title(
+        f"Graph layer {ell}: final representation probe across feature types "
+        f"(model layer {d_star}, position {p_star})"
+    )
+    ax.grid(True, alpha=0.3)
+    ax.legend(loc="best", fontsize=9)
+
+    plot_path = out_dir / f"probe_final_rep_on_loss_grad_{ell}.png"
+    fig.tight_layout()
+    fig.savefig(plot_path, dpi=160)
+    plt.close(fig)
+    print(f"saved plot -> {plot_path}  (layer {ell}, final h probe on -dL/dh)")
 
 
 def _render_rep_across_layers(layers, payload, steps, out_dir):
