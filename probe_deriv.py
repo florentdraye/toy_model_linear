@@ -47,6 +47,7 @@ def main():
             print(f"layer {ell} not tracked (available: {layers}); skipping")
             continue
         _render_layer(ell, payload, steps, out_dir)
+        _render_loss_grad_vs_rep(ell, payload, steps, out_dir)
 
     cmp_layers = [ell for ell in args.rep_compare_layers if ell in layers]
     if cmp_layers:
@@ -116,6 +117,62 @@ def _render_layer(ell, payload, steps, out_dir):
     fig.savefig(plot_path, dpi=140)
     plt.close(fig)
     print(f"saved plot -> {plot_path}  (layer {ell})")
+
+
+def _render_loss_grad_vs_rep(ell, payload, steps, out_dir):
+    """Compare probes refit at each checkpoint on h and on -dL/dh."""
+    rep = payload.get("top1", {}).get(ell)
+    loss_grad = payload.get("top1_loss_grad", {}).get(ell)
+    if rep is None or loss_grad is None or rep.numel() == 0 or loss_grad.numel() == 0:
+        print(f"layer {ell}: contemporaneous rep/loss-gradient probes unavailable; skipping")
+        return
+
+    count = min(rep.shape[0], loss_grad.shape[0], steps.numel())
+    rep = rep[:count]
+    loss_grad = loss_grad[:count]
+    x = steps[:count].numpy()
+
+    # Fix the comparison cell using the final h(t) probe only, so selection does
+    # not favor the loss-gradient probe and both curves use the identical cell.
+    final_rep = rep[-1]
+    width = final_rep.shape[1]
+    best_idx = final_rep.reshape(-1).argmax().item()
+    d_star, p_star = best_idx // width, best_idx % width
+
+    rep_best = rep.flatten(1).max(dim=1).values.numpy()
+    grad_best = loss_grad.flatten(1).max(dim=1).values.numpy()
+    rep_fixed = rep[:, d_star, p_star].numpy()
+    grad_fixed = loss_grad[:, d_star, p_star].numpy()
+    chance = 1.0 / payload["reachable_classes"][ell].numel()
+
+    fig, axes = plt.subplots(2, 1, figsize=(9, 8), sharex=True)
+    axes[0].plot(x, rep_best, lw=2.2, color="C0", label=r"DoM on $h(t)$")
+    axes[0].plot(x, grad_best, lw=2.2, color="C5",
+                 label=r"DoM on $-\partial L/\partial h$")
+    axes[0].set_title("Best model-layer/position cell at each checkpoint")
+
+    axes[1].plot(x, rep_fixed, lw=2.2, color="C0", label=r"DoM on $h(t)$")
+    axes[1].plot(x, grad_fixed, lw=2.2, color="C5",
+                 label=r"DoM on $-\partial L/\partial h$")
+    axes[1].set_title(f"Same fixed cell: model layer {d_star}, position {p_star}")
+    axes[1].set_xlabel("training step")
+
+    for ax in axes:
+        ax.axhline(chance, color="grey", ls=":", lw=1,
+                   label=f"chance ({chance:.3f})")
+        ax.set_ylabel("held-out top-1 accuracy")
+        ax.set_ylim(0, 1)
+        ax.grid(True, alpha=0.3)
+        ax.legend(loc="best")
+
+    fig.suptitle(
+        f"Graph layer {ell}: contemporaneous DoM probe on representation vs loss descent"
+    )
+    plot_path = out_dir / f"probe_dom_loss_grad_vs_rep_{ell}.png"
+    fig.tight_layout()
+    fig.savefig(plot_path, dpi=160)
+    plt.close(fig)
+    print(f"saved plot -> {plot_path}  (layer {ell}, probes refit every checkpoint)")
 
 
 def _render_rep_across_layers(layers, payload, steps, out_dir):
