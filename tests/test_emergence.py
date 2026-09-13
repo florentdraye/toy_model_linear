@@ -83,6 +83,13 @@ class EmergenceTest(unittest.TestCase):
                                                   diagnostics['direction_validation_after'])))
         self.assertTrue(all(torch.equal(t, model.state_dict()[name]) for name, t in weights.items()))
         self.assertTrue(all(p.requires_grad for p in model.parameters()))
+        refined, ce_info = optimize_directions(model, bank, v, 1, positions,
+                                               steps=10, objective='ce', initial=fitted)
+        self.assertTrue(all(b <= a for a, b in zip(ce_info['direction_validation_before'],
+                                                  ce_info['direction_validation_after'])))
+        self.assertTrue((refined.flatten(1).norm(dim=1) <=
+                         torch.tensor(ce_info['direction_radius']) + 1e-6).all())
+        self.assertTrue(all(torch.equal(t, model.state_dict()[name]) for name, t in weights.items()))
         metrics = measure(model, bank, v, 1, positions, 2)
         self.assertEqual(len(metrics['gain_raw']), len(targets))
 

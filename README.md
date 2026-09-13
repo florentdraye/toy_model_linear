@@ -35,6 +35,21 @@ Not tracked: `runs/`, `logs/`, `__pycache__/`, `.claude/`, and any `*.pt` / `*.p
 
 ### Focused latent-frequency / steering experiment
 
+The recommended wider-edit experiment is `submit_emergence_robust.sub`: three
+seeds, a 10× geometric frequency range, weight decay 0.1, and a matched uniform
+control. It overrides the script defaults described below. After those four jobs
+finish, `submit_emergence_refine.sub` improves the fitted vectors at every saved
+checkpoint without retraining. These recipes protect existing outputs; choose
+new directory names when repeating a run.
+
+Refinement continues the 400-step probability-loss fit with 400 steps of log-loss
+optimization. This supplies useful gradients when the original prediction is
+confidently wrong. The best probability-error validation iterate is retained,
+including the original vector as a candidate; neither the test set nor future
+checkpoints select the edit. The norm budget and model are unchanged. Both the
+original (`emergence_wide_*`) and refined (`emergence_refined_*`) histories are
+kept. `audit_emergence_solver.py` checks fitting budgets at transition checkpoints.
+
 `train_emergence.py` reuses the DAG and transformer, with one selected graph
 layer (default 3), one fixed post-block intervention (default block 1 of 6),
 and paired steering/generalization curves. It does not run the old probe cube.
@@ -74,6 +89,10 @@ token layouts, and norm budgets 1×/3× on calibration validation only. Block 1
 with a single token and 1× budget achieved ≥0.99 validation fidelity for the
 five learned pilot latents; it was chosen for the simple vector experiment.
 Fresh confirmation seeds are 43–45. Site selection did not inspect their results.
+The single-token site proved unstable in one confirmation seed; the recommended
+wider-edit recipe therefore uses the four-position slice that was also effective
+in the pilot calibration. This is one 512-dimensional vector per latent, reshaped
+to four × 128 on insertion. It is not claimed to be a single-token intervention.
 
 Optional `--site suffix` edits the residual positions from the latent's token to
 the end, at one transformer depth. The vector is the flattened residual slice
@@ -102,6 +121,16 @@ Submit on the cluster (never train on the login node or laptop):
 mkdir -p /fast/fdraye/toy_model_linear/logs
 condor_submit_bid 2000 submit_emergence_seeds.sub  # three skewed-frequency seeds
 condor_submit_bid 2000 submit_emergence.sub        # uniform-frequency control
+```
+
+For the recommended wider-edit condition, use:
+
+```bash
+condor_submit_bid 2000 submit_emergence_robust.sub
+# After all four source training jobs finish:
+condor_submit_bid 2000 submit_emergence_refine.sub
+# After downloading the three refined histories:
+python3 plot_emergence.py runs/emergence_refined_s*/history.json --out-dir runs/emergence_summary --smooth-window 3
 ```
 
 The wrapper uses granularity's existing PyTorch venv. Results are written to
