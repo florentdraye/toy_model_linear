@@ -16,6 +16,8 @@ def plot(paths, out):
     data = [json.loads(Path(p).read_text()) for p in paths]
     ref = data[0]
     for d in data[1:]:
+        if d.get('model_transform') != ref.get('model_transform'):
+            raise ValueError('cannot pool different model transformations')
         for key in ('latents', 'frequency', 'cells', 'reference', 'model_config',
                     'evaluation_bank_sha256', 'direction_estimator', 'selection'):
             if d[key] != ref[key]:
@@ -51,8 +53,11 @@ def plot(paths, out):
     seed_label = f"seed {ref['config']['seed']}" if len(data) == 1 else f'{len(data)} seeds'
     strengths = ref.get('alphas', [1.])
     strength_label = 'strength 1' if strengths == [1.] else f'training-selected strength from {strengths}'
+    transform = ref.get('model_transform', {})
+    weight_label = (f" · model-weight EMA {transform['decay']}"
+                    if transform.get('decay', 0) else '')
     fig.suptitle(f"Width {ref['model_config']['d_model']} · {len(freq)} latents · {seed_label} · {status}\n"
-                 f'Full-support target − reference means · {strength_label} · fixed held-out examples', fontsize=12)
+                 f'Full-support target − reference means · {strength_label} · fixed held-out examples{weight_label}', fontsize=12)
     fig.savefig(out / 'best_location_steering.png')
     fig.savefig(out / 'best_location_steering.pdf')
     plt.close(fig)

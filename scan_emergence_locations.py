@@ -19,6 +19,7 @@ from audit_emergence_interventions import capture, score_edit
 from remeasure_emergence_best_site import all_depth_means
 from scan_emergence_depths import calibration_ids
 from src.config import ModelConfig
+from src.checkpoint_average import CheckpointAverage
 from src.data import enumerate_paths
 from src.emergence import measure
 from src.graph import Graph
@@ -33,9 +34,12 @@ def main():
     p.add_argument('run', type=Path)
     p.add_argument('--out-dir', type=Path, required=True)
     p.add_argument('--steps', type=int, nargs='+')
+    p.add_argument('--weight-ema-decay', type=float, default=0.,
+                   help='causal EMA of every saved model snapshot; recompute means and all scores')
     p.add_argument('--alphas', type=float, nargs='+', default=[1.],
                    help='optional explicit strength grid, selected on training pairs only')
     a = p.parse_args()
+    average = CheckpointAverage(a.weight_ema_decay)
     if 1. not in a.alphas or any(x <= 0 for x in a.alphas) or len(set(a.alphas)) != len(a.alphas):
         raise ValueError('strength grid must be distinct and positive, and include 1')
     a.alphas.sort()
@@ -46,11 +50,18 @@ def main():
     if not source.get('complete') and a.steps is None:
         raise ValueError('unfinished training requires explicit saved steps')
     rows = [r for r in source['history'] if a.steps is None or r['step'] in a.steps]
+    rows.sort(key=lambda r: r['step'])
     if not rows or (a.steps is not None and set(a.steps) != {r['step'] for r in rows}):
         raise ValueError('requested checkpoints unavailable')
     for r in rows:
         if not (model_dir / f"step{r['step']:06d}.pt").is_file():
             raise FileNotFoundError(f"model snapshot at {r['step']} is unavailable")
+    average_rows = sorted([r for r in source['history'] if r['step'] <= rows[-1]['step']],
+                          key=lambda r: r['step']) if a.weight_ema_decay else rows
+    for r in average_rows:
+        if not (model_dir / f"step{r['step']:06d}.pt").is_file():
+            raise FileNotFoundError(f"EMA input snapshot at {r['step']} is unavailable")
+    average_cursor = 0
     a.out_dir.mkdir(parents=True, exist_ok=False)
     torch.set_num_threads(4)
     torch.set_float32_matmul_precision('highest')
@@ -76,12 +87,18 @@ def main():
              for d in range(len(model.blocks)+1) for name, pos in sites.items() for alpha in a.alphas]
     if a.alphas == [1.]:
         cells = [{k: v for k, v in cell.items() if k != 'alpha'} for cell in cells]
-    result = dict(source=str(a.run), model_directory=str(model_dir), config=c, model_config=source['model_config'],
+    result = dict(source=str(a.run), source_model_directory=str(model_dir),
+                  model_directory=str(a.out_dir / 'models') if a.weight_ema_decay else str(model_dir),
+                  config=c, model_config=source['model_config'],
                   latents=source['latents'], frequency=source['frequency'],
                   cells=cells, reference=source['reference'],
                   selection=('per latent and checkpoint, highest raw TRAINING calibration score'
                              + ('; alpha 1' if a.alphas == [1.] else '; explicit strength grid')),
                   alphas=a.alphas,
+                  model_transform=dict(method='causal_checkpoint_weight_ema' if a.weight_ema_decay else 'identity',
+                                       decay=a.weight_ema_decay,
+                                       input_steps=[r['step'] for r in average_rows],
+                                       initialization='first saved snapshot; no future snapshots'),
                   calibration='fixed final quarter of fit pairs; overlaps training mean support',
                   evaluation='fixed held-out pairs; excluded from means and location selection',
                   evaluation_bank_sha256=hashlib.sha256(test_ids.numpy().tobytes()).hexdigest(),
@@ -94,8 +111,13 @@ def main():
     start = time.time()
     for old in rows:
         step = old['step']
-        model.load_state_dict(torch.load(model_dir / f'step{step:06d}.pt',
-                                        map_location='cpu', weights_only=True))
+        while average_cursor < len(average_rows) and average_rows[average_cursor]['step'] <= step:
+            input_step = average_rows[average_cursor]['step']
+            state = torch.load(model_dir / f'step{input_step:06d}.pt',
+                               map_location='cpu', weights_only=True)
+            average.update(input_step, state)
+            average_cursor += 1
+        model.load_state_dict(average.state)
         means = all_depth_means(model, bank)
         vectors = (means[:, target_ix] - means[:, ref_ix:ref_ix+1]).float()
         scores = []
@@ -123,11 +145,20 @@ def main():
             for key, value in m.items():
                 metrics.setdefault(key, []).extend(value)
         difference = max(abs(x-y) for x, y in zip(metrics['gain_raw'], old['gain_raw']))
-        if difference > .002:
+        if not a.weight_ema_decay and difference > .002:
             raise ValueError(f'generalization mismatch: {difference}')
+        fixed = old['steer_raw']
+        if a.weight_ema_decay:
+            pos = list(range(c['graph_layer'] - 1, model.cfg.seq_len))
+            with torch.autocast('cuda', dtype=torch.bfloat16):
+                fixed = measure(model, test, vectors[1, :, pos], 1, pos, c['eval_batch'])['steer_raw']
         row = dict(step=step, choices=choices, calibration_scores=scores.tolist(),
-                   generalization_replay_max_difference=difference,
-                   fixed_block1_steer=old['steer_raw'], **metrics)
+                   fixed_block1_steer=fixed, **metrics)
+        row['generalization_change_from_source_max' if a.weight_ema_decay else
+            'generalization_replay_max_difference'] = difference
+        if a.weight_ema_decay:
+            (a.out_dir / 'models').mkdir(exist_ok=True)
+            torch.save(average.state, a.out_dir / 'models' / f'step{step:06d}.pt')
         result['history'].append(row)
         torch.save(dict(class_means=means.cpu(), selected_vectors=selected_vectors),
                    a.out_dir / f'step{step:06d}.pt')
