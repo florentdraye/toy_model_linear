@@ -19,6 +19,7 @@ def main():
     p = argparse.ArgumentParser(description=__doc__)
     p.add_argument('run', type=Path)
     p.add_argument('--multiplier', type=int, default=3)
+    p.add_argument('--objective', choices=['brier', 'ce', 'hybrid'], default='brier')
     a = p.parse_args()
     torch.set_num_threads(4)
     torch.set_float32_matmul_precision('high')
@@ -46,17 +47,20 @@ def main():
         model.load_state_dict(torch.load(a.run / 'models' / f'step{step:06d}.pt', weights_only=True))
         with torch.autocast('cuda', dtype=torch.bfloat16):
             means = fit_directions(model, fit, c['steer_depth'], result['positions'], c['eval_batch'])
+            initial = (torch.load(a.run / 'directions' / f'step{step:06d}.pt', weights_only=True).cuda()
+                       if a.objective != 'brier' else None)
             vectors, info = optimize_directions(model, fit, means, c['steer_depth'], result['positions'],
-                                                 steps=c['direction_steps']*a.multiplier, lr=c['direction_lr'])
+                                                 steps=c['direction_steps']*a.multiplier, lr=c['direction_lr'],
+                                                 objective=a.objective, initial=initial)
             metrics = measure(model, test, vectors, c['steer_depth'], result['positions'], c['eval_batch'], means)
         old = next(h for h in result['history'] if h['step'] == step)
         row = {'step': step, 'crossing_latents': [result['latents'][j] for j in latent_indices],
                'original_steer': old['steer_raw'], 'refined_steer': metrics['steer_raw'],
                'gain': metrics['gain_raw'], 'original_iterations': c['direction_steps'],
-               'refined_iterations': c['direction_steps']*a.multiplier, **info}
+               'refined_iterations': c['direction_steps']*a.multiplier, 'objective': a.objective, **info}
         output.append(row)
         print(json.dumps(row), flush=True)
-        (a.run / 'solver_audit.json').write_text(json.dumps(output, indent=2) + '\n')
+        (a.run / f'solver_audit_{a.objective}.json').write_text(json.dumps(output, indent=2) + '\n')
 
 
 if __name__ == '__main__':

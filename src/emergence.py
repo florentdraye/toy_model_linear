@@ -134,7 +134,7 @@ def from_hidden(model, h, depth):
 
 
 def optimize_directions(model, bank, means, depth, positions, steps=150,
-                        lr=.03, batch_size=128, radius_scale=1.):
+                        lr=.03, batch_size=128, radius_scale=1., objective='brier', initial=None):
     """Fit constant causal vectors with frozen weights and held-out validation.
 
     One vector per target, initialized at the mean shift and constrained to the
@@ -162,7 +162,7 @@ def optimize_directions(model, bank, means, depth, positions, steps=150,
     n_train = max(1, int(n * .75))
     if n_train == n:
         raise ValueError('vector calibration needs a validation pair')
-    unit = torch.nn.Parameter(means / radius)
+    unit = torch.nn.Parameter((means if initial is None else initial) / radius)
     optimizer = torch.optim.Adam([unit], lr=lr)
     flags = [p.requires_grad for p in model.parameters()]
     for p in model.parameters():
@@ -170,11 +170,14 @@ def optimize_directions(model, bank, means, depth, positions, steps=150,
     gen = torch.Generator(device=device).manual_seed(817)
     row = torch.arange(k, device=device)[:, None]
 
-    def loss_at(indices):
+    def loss_at(indices, loss_type='brier'):
         h = hidden[row, indices].clone()
         h[:, :, positions] += (unit * radius)[:, None].to(h.dtype)
-        probabilities = from_hidden(model, h.flatten(0, 1), depth).float().softmax(-1)
+        logits = from_hidden(model, h.flatten(0, 1), depth).float()
         labels = bank['y_on'][row, indices].flatten()
+        if loss_type == 'ce':
+            return F.cross_entropy(logits, labels, reduction='none').reshape(k, -1).mean(1)
+        probabilities = logits.softmax(-1)
         targets = F.one_hot(labels, probabilities.shape[-1]).float()
         return (probabilities-targets).square().sum(-1).reshape(k, -1).mean(1)
 
@@ -186,7 +189,8 @@ def optimize_directions(model, bank, means, depth, positions, steps=150,
             best_loss = initial_loss.clone()
         for step in range(1, steps + 1):
             indices = torch.randint(n_train, (k, min(batch_size, n_train)), generator=gen, device=device)
-            loss = loss_at(indices).mean()
+            loss_type = 'ce' if objective == 'ce' or (objective == 'hybrid' and step <= .75*steps) else 'brier'
+            loss = loss_at(indices, loss_type).mean()
             optimizer.zero_grad(set_to_none=True)
             loss.backward()
             optimizer.step()
