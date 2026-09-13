@@ -1,5 +1,9 @@
 # Difference of means, last token only
 
+Follow-up: the [completed depth scan](MEAN_DEPTH_RESULTS.md) finds that the same
+mean edit fails at all six final-checkpoint depths on training calibration pairs.
+Exact patches succeed only at block 6. The held-out replay below is preserved.
+
 Completed on all 101 saved checkpoints of seeds 46, 47, and 48. Generalization
 is **exactly unchanged** from the previous figure, including an independent
 re-evaluation that matched every saved score exactly. The requested simpler

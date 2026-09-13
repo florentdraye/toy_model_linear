@@ -35,6 +35,11 @@ Not tracked: `runs/`, `logs/`, `__pycache__/`, `.claude/`, and any `*.pt` / `*.p
 
 ### Focused latent-frequency / steering experiment
 
+The follow-up [six-depth scan](MEAN_DEPTH_RESULTS.md) is complete: final-checkpoint
+last-token mean steering fails at every block in all three seeds. Exact patches
+work only at block 6, where they reproduce the classifier's target input.
+There is no supported intervention depth for the current mean edit.
+
 The completed last-token mean replay is documented in
 [MEAN_STEERING_RESULTS.md](MEAN_STEERING_RESULTS.md), with the current
 [steering/generalization figure](runs/emergence_summary/steering_gain.png).
