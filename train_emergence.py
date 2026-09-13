@@ -182,6 +182,11 @@ def main():
             result.setdefault('horizon_extensions', []).append({'at_step': start, 'new_steps': a.steps})
         result['config'] = config
         result['complete'] = start == a.steps
+        result.setdefault('resumptions', []).append({
+            'step': start, 'host': socket.gethostname(),
+            'gpu': torch.cuda.get_device_name() if a.device.startswith('cuda') else 'cpu',
+            'git_commit': subprocess.check_output(['git', 'rev-parse', 'HEAD'], text=True).strip()})
+        print(json.dumps({'resumed': result['resumptions'][-1]}), flush=True)
     graph.save(a.out_dir / 'graph.pt')
     print(json.dumps({k: result[k] for k in ('host', 'gpu', 'latents', 'frequency', 'reference', 'positions')}), flush=True)
     t0 = time.time()
