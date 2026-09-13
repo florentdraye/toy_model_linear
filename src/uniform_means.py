@@ -5,8 +5,8 @@ import torch
 @torch.no_grad()
 def hidden_at(model, edges, depth):
     """Stop at the intervention block; no downstream computation is needed."""
-    if not 1 <= depth <= len(model.blocks):
-        raise ValueError('depth must be a 1-based transformer block')
+    if not 0 <= depth <= len(model.blocks):
+        raise ValueError('depth must be embedding (0) or an existing block')
     h = model.drop(model.tok_emb(edges) + model.pos_emb)
     for block in model.blocks[:depth]:
         h = block(h)

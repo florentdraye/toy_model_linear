@@ -20,9 +20,9 @@ class BestSiteTest(unittest.TestCase):
         bank = UniformMeanBank(edges, torch.tensor([10, 20, 20, 30, 30]))
         before = {k: v.clone() for k, v in self.model.state_dict().items()}
         means = all_depth_means(self.model, bank, batch_size=2)
-        for depth in (1, 2):
+        for depth in (0, 1, 2):
             _, expected = bank.fit(self.model, bank.classes, depth, [0, 1, 2], batch_size=2)
-            torch.testing.assert_close(means[depth-1], expected, atol=1e-7, rtol=1e-6)
+            torch.testing.assert_close(means[depth], expected, atol=1e-7, rtol=1e-6)
         self.assertTrue(all(torch.equal(before[k], v) for k, v in self.model.state_dict().items()))
 
     def test_selection_is_per_latent_and_uses_raw_calibration(self):
@@ -31,9 +31,9 @@ class BestSiteTest(unittest.TestCase):
         cube[0, 2, 1, 1] = .8
         choices = choose_cells(cube, [1., 4.])
         self.assertEqual([(c['depth'], c['position'], c['alpha']) for c in choices],
-                         [(2, 0, 1.), (1, 2, 4.)])
+                         [(1, 0, 1.), (0, 2, 4.)])
         unit = choose_cells(cube, [1., 4.], unit_only=True)
-        self.assertEqual((unit[1]['depth'], unit[1]['position'], unit[1]['alpha']), (1, 0, 1.))
+        self.assertEqual((unit[1]['depth'], unit[1]['position'], unit[1]['alpha']), (0, 0, 1.))
         self.assertLess(choices[0]['calibration_skill'], 0.)
 
     def test_calibration_scoring_matches_hook_metric(self):
@@ -41,11 +41,12 @@ class BestSiteTest(unittest.TestCase):
         on = torch.tensor([[[1, 1, 2], [2, 2, 0]]])
         labels = torch.tensor([[0, 1]])
         vector = torch.randn(1, 3, 8) * .1
-        hidden = hidden_at(self.model, off[0], 1)[None]
-        score = calibration_scores(self.model, hidden, labels, vector, 1, 2, 4.)
-        expected = measure(self.model, dict(off=off, on=on, y_on=labels, y_off=1-labels),
-                           4*vector[:, 2:3], 1, [2])
-        self.assertAlmostEqual(float(score[0]), expected['steer_raw'][0], places=6)
+        for depth in (0, 1, 2):
+            hidden = hidden_at(self.model, off[0], depth)[None]
+            score = calibration_scores(self.model, hidden, labels, vector, depth, 2, 4.)
+            expected = measure(self.model, dict(off=off, on=on, y_on=labels, y_off=1-labels),
+                               4*vector[:, 2:3], depth, [2])
+            self.assertAlmostEqual(float(score[0]), expected['steer_raw'][0], places=6)
 
 
 if __name__ == '__main__':

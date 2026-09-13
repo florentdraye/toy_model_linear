@@ -34,14 +34,15 @@ def all_depth_means(model, bank, batch_size=8192):
     if model.training or batch_size < 1:
         raise ValueError('need an eval model and positive batch size')
     device = next(model.parameters()).device
-    means = torch.zeros(len(model.blocks), len(bank.classes), model.cfg.seq_len,
+    means = torch.zeros(len(model.blocks)+1, len(bank.classes), model.cfg.seq_len,
                         model.cfg.d_model, dtype=torch.float64, device=device)
     start = 0
     with torch.autocast(device.type, enabled=False):
         for j, count in enumerate(bank.counts):
             for edges in bank.edges[start:start+count].split(batch_size):
                 h = model.drop(model.tok_emb(edges.to(device)) + model.pos_emb)
-                for depth, block in enumerate(model.blocks):
+                means[0, j] += h.double().sum(0)
+                for depth, block in enumerate(model.blocks, start=1):
                     h = block(h)
                     means[depth, j] += h.double().sum(0)
             means[:, j] /= count
@@ -65,7 +66,7 @@ def choose_cells(cube, alphas, unit_only=False):
     for latent, i in enumerate(best.tolist()):
         depth, rem = divmod(i, scores.shape[1]*len(use))
         position, ai = divmod(rem, len(use))
-        choices.append(dict(depth=depth+1, position=position, alpha=alphas[use[ai]],
+        choices.append(dict(depth=depth, position=position, alpha=alphas[use[ai]],
                             calibration_skill=float(flat[i, latent])))
     return choices
 
@@ -144,15 +145,15 @@ def main():
         positive = means[:, ix]
         vectors = dict(rest=(positive-(means.sum(1, keepdim=True)-positive)/(len(bank.classes)-1)).float(),
                        reference=(positive-means[:, ref_ix:ref_ix+1]).float())
-        cubes = {key: torch.empty(len(model.blocks), model.cfg.seq_len, len(a.alphas), len(ix),
+        cubes = {key: torch.empty(len(model.blocks)+1, model.cfg.seq_len, len(a.alphas), len(ix),
                                   dtype=torch.float64) for key in vectors}
-        for depth in range(1, len(model.blocks)+1):
+        for depth in range(len(model.blocks)+1):
             hidden = capture(model, paths, pairs[..., 0], depth)
             for name, v in vectors.items():
                 for pos in range(model.cfg.seq_len):
                     for ai, alpha in enumerate(a.alphas):
-                        cubes[name][depth-1, pos, ai] = calibration_scores(
-                            model, hidden, labels, v[depth-1], depth, pos, alpha)
+                        cubes[name][depth, pos, ai] = calibration_scores(
+                            model, hidden, labels, v[depth], depth, pos, alpha)
         selections = {}
         # Freeze ALL four selections before scoring any held-out pairs.
         for name, cube in cubes.items():
@@ -167,7 +168,7 @@ def main():
             selected = []
             for j, choice in enumerate(choices):
                 depth, pos, alpha = choice['depth'], choice['position'], choice['alpha']
-                vector = alpha * direction[depth-1, j:j+1, pos:pos+1]
+                vector = alpha * direction[depth, j:j+1, pos:pos+1]
                 selected.append(vector[0].cpu())
                 with torch.autocast('cuda', dtype=torch.bfloat16):
                     measured = measure(model, {k: v[j:j+1] for k, v in test.items()},

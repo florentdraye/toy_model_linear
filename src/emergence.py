@@ -52,7 +52,9 @@ def paired_bank(paths, allowed, layer, targets, reference, n, seed, radix):
 
 
 def forward_at(model, edges, depth, positions, delta=None, capture=False):
-    """Post-block intervention with a temporary hook, removed even on failure."""
+    """Residual intervention; depth 0 is embedding, positive depths post-block."""
+    if not 0 <= depth <= len(model.blocks):
+        raise ValueError('depth must be embedding (0) or an existing block')
     saved = []
 
     def hook(module, inputs, h):
@@ -63,7 +65,8 @@ def forward_at(model, edges, depth, positions, delta=None, capture=False):
             h[:, positions] = h[:, positions] + delta
         return h
 
-    handle = model.blocks[depth - 1].register_forward_hook(hook)
+    site = model.drop if depth == 0 else model.blocks[depth - 1]
+    handle = site.register_forward_hook(hook)
     try:
         logits = model(edges)
     finally:
