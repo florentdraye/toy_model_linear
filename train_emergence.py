@@ -73,6 +73,13 @@ def main():
         raise ValueError('CPU is for smoke checks only (at most two steps); submit GPU work')
     if (a.out_dir / 'history.json').exists() and not a.resume:
         raise FileExistsError('output exists; use a fresh directory or --resume')
+    config = {k: str(v) if isinstance(v, Path) else v for k, v in vars(a).items()}
+    saved = None
+    if a.resume:
+        saved = torch.load(a.out_dir / 'resume.pt', map_location=a.device, weights_only=False)
+        for k, v in config.items():
+            if k not in ('resume', 'device', 'out_dir') and saved['result']['config'][k] != v:
+                raise ValueError(f'cannot resume with changed {k}')
     torch.set_num_threads(4)
     torch.manual_seed(a.seed)
     torch.set_float32_matmul_precision('high')
@@ -109,22 +116,18 @@ def main():
               {'params': [p for p in model.parameters() if p.ndim < 2], 'weight_decay': 0.}]
     opt = torch.optim.AdamW(groups, lr=a.lr, betas=(.9, .95), fused=a.device.startswith('cuda'))
     gen = torch.Generator(device=a.device).manual_seed(a.seed + 1234)
-    config = {k: str(v) if isinstance(v, Path) else v for k, v in vars(a).items()}
     result = {'config': config, 'model_config': asdict(mcfg), 'graph_config': asdict(gcfg),
               'git_commit': subprocess.check_output(['git', 'rev-parse', 'HEAD'], text=True).strip(),
               'host': socket.gethostname(), 'torch': torch.__version__,
               'gpu': torch.cuda.get_device_name() if a.device.startswith('cuda') else 'cpu',
               'reference': reference, 'latents': targets, 'positions': positions,
+              'fit_pairs_actual': fit['off'].shape[1], 'eval_pairs_actual': test['off'].shape[1],
               'frequency': sampler.probabilities[order[ranks].to(a.device)].tolist(),
               'classes': sampler.classes.tolist(), 'probabilities': sampler.probabilities.tolist(),
               'history': []}
     start = 0
     counts = torch.zeros(len(sampler.classes), device=a.device, dtype=torch.long)
     if a.resume:
-        saved = torch.load(a.out_dir / 'resume.pt', map_location=a.device, weights_only=False)
-        for k, v in config.items():
-            if k not in ('resume', 'device', 'out_dir') and saved['result']['config'][k] != v:
-                raise ValueError(f'cannot resume with changed {k}')
         model.load_state_dict(saved['model'])
         opt.load_state_dict(saved['optimizer'])
         gen.set_state(saved['sampler_rng'].cpu())

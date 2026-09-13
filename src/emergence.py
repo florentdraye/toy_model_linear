@@ -17,39 +17,35 @@ def path_ids(edges, radix):
 def paired_bank(paths, allowed, layer, targets, reference, n, seed, radix):
     """Fixed unique pairs; BOTH paths belong to the requested support.
 
-    Rejection is uniform over prefix pairs and suffixes. Do not discard pairs
+    Selection is uniform over prefix pairs and suffixes. Do not discard pairs
     whose endpoints coincide: their zero teacher effect penalizes leakage.
     """
     rng = torch.Generator().manual_seed(seed)
     edges, nodes = paths['edge_seqs'], paths['nodes']
-    prefixes = edges[:, :layer].unique(dim=0)
     # Enumeration is lexicographic; a zero suffix identifies each prefix node.
     suffix_count = radix ** (edges.shape[1] - layer)
     prefix_nodes = nodes[::suffix_count, layer]
-    by_node = {int(k): prefixes[prefix_nodes == k] for k in [reference, *targets]}
+    by_node = {int(k): torch.where(prefix_nodes == k)[0] for k in [reference, *targets]}
     pairs = []
     for k in targets:
-        collected, keys = [], set()
-        for _ in range(1000):
-            size = max(4096, 4 * (n - len(keys)))
-            a = by_node[reference][torch.randint(len(by_node[reference]), (size,), generator=rng)]
-            b = by_node[k][torch.randint(len(by_node[k]), (size,), generator=rng)]
-            suffix = torch.randint(radix, (size, edges.shape[1] - layer), generator=rng)
-            off, on = torch.cat([a, suffix], 1), torch.cat([b, suffix], 1)
-            ia, ib = path_ids(off, radix), path_ids(on, radix)
-            good = allowed[ia] & allowed[ib]
-            for i, j in zip(ia[good].tolist(), ib[good].tolist()):
-                if (i, j) not in keys:
-                    keys.add((i, j))
-                    collected.append((i, j))
-                    if len(collected) == n:
-                        break
-            if len(collected) == n:
-                break
-        if len(collected) != n:
-            raise ValueError(f"insufficient unique matched pairs for latent {k}: {len(collected)}/{n}")
-        pairs.append(torch.tensor(collected))
-    ids = torch.stack(pairs)
+        # Enumerate the small conditional support exactly. Some reachable nodes
+        # have only two prefixes: rejection cannot manufacture more unique test
+        # pairs. Cap all latents to the same available coverage, without replacing
+        # a difficult latent or duplicating pairs to inflate sample counts.
+        a, b = by_node[reference], by_node[k]
+        suffix = torch.arange(suffix_count)
+        shape = (len(a), len(b), suffix_count)
+        ia = (a[:, None, None] * suffix_count + suffix).expand(shape)
+        ib = (b[None, :, None] * suffix_count + suffix).expand(shape)
+        good = allowed[ia] & allowed[ib]
+        ids = torch.stack([ia[good], ib[good]], -1)
+        if len(ids) < 2:
+            raise ValueError(f'insufficient matched support for latent {k}')
+        pairs.append(ids[torch.randperm(len(ids), generator=rng)[:n]])
+    coverage = min(len(p) for p in pairs)
+    if coverage < n:
+        print(f'[pairs] requested {n}; using {coverage} unique pairs per latent (finite support)', flush=True)
+    ids = torch.stack([p[:coverage] for p in pairs])
     return {"off": edges[ids[..., 0]], "on": edges[ids[..., 1]],
             "y_off": nodes[ids[..., 0], -1], "y_on": nodes[ids[..., 1], -1],
             "ids": ids}
