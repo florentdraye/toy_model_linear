@@ -44,6 +44,14 @@ class EmergenceTest(unittest.TestCase):
             self.assertTrue((graph.traverse(bank['off'][j])[:, 2] == ref).all())
             self.assertTrue(torch.equal(nodes[:, -1], bank['y_on'][j]))
 
+    def test_finite_support_caps_coverage_without_duplicates(self):
+        graph, paths, allowed, targets, ref, bank = self.setup_bank()
+        full = paired_bank(paths, ~allowed, 2, targets, ref, 10000, 9, 4)
+        self.assertLess(full['ids'].shape[1], 10000)
+        for pairs in full['ids']:
+            self.assertEqual(len(pairs.unique(dim=0)), len(pairs))
+        self.assertFalse(allowed[full['ids']].any())
+
     def test_optimal_direction_and_hook(self):
         graph, paths, allowed, targets, ref, bank = self.setup_bank()
         model = ToyTransformer(ModelConfig(vocab_size=4, seq_len=4, n_classes=4,
