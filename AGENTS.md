@@ -49,6 +49,7 @@ The cluster login banner says not to launch compute-intensive work on login node
 
 ## Operational notes
 
+- The cluster's `condor_q` wrapper may return stale state after job edits. Use `/usr/bin/condor_q_raw` for immediate verification of holds, edited arguments, and releases.
 - Include the actual plot inline with experimental results so the user can verify them visually; a report link alone is insufficient.
 - Steering location is not restricted to the last token: the user wants steering evaluated across locations and the best token position shown.
 - Interactive allocations and SSH sessions do not survive assistant sessions reliably; reconnect and request a fresh allocation when necessary.

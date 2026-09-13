@@ -1,7 +1,8 @@
 """Select analytic reference-mean locations on training pairs, then score held-out.
 
 Includes embeddings, every block, every single token, the graph-latent suffix,
-and all tokens. Strength stays one. Explicit snapshots may be scanned while
+and all tokens. Strength defaults to one; an optional grid uses training pairs.
+Explicit snapshots may be scanned while
 training continues; saved model files must already exist.
 """
 import argparse
