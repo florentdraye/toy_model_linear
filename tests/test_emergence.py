@@ -4,7 +4,8 @@ import torch
 from src.config import GraphConfig, ModelConfig
 from src.graph import Graph
 from src.data import enumerate_paths, split_indices, LatentFrequencySampler
-from src.emergence import paired_bank, path_ids, fit_directions, forward_at, fidelity, measure
+from src.emergence import (paired_bank, path_ids, fit_directions, forward_at, fidelity,
+                           measure, target_fidelity, optimize_directions, from_hidden)
 
 
 class EmergenceTest(unittest.TestCase):
@@ -65,6 +66,15 @@ class EmergenceTest(unittest.TestCase):
         _, hb = forward_at(model, b, 1, [0, 1, 2, 3], capture=True)
         patched = forward_at(model, a, 1, [0, 1, 2, 3], hb-ha)
         self.assertTrue(torch.allclose(patched, model(b), atol=1e-6))
+        self.assertTrue(torch.allclose(from_hidden(model, ha, 1), model(a), atol=1e-6))
+        weights = {name: t.clone() for name, t in model.state_dict().items()}
+        fitted, diagnostics = optimize_directions(model, bank, v, 1, positions, steps=10)
+        self.assertTrue((fitted.flatten(1).norm(dim=1) <=
+                         torch.tensor(diagnostics['direction_radius']) + 1e-6).all())
+        self.assertTrue(all(b <= a for a, b in zip(diagnostics['direction_validation_before'],
+                                                  diagnostics['direction_validation_after'])))
+        self.assertTrue(all(torch.equal(t, model.state_dict()[name]) for name, t in weights.items()))
+        self.assertTrue(all(p.requires_grad for p in model.parameters()))
         metrics = measure(model, bank, v, 1, positions, 2)
         self.assertEqual(len(metrics['gain_raw']), len(targets))
 
@@ -76,6 +86,13 @@ class EmergenceTest(unittest.TestCase):
         leaking = target.clone()
         leaking[1] = torch.tensor([1., -1.])
         self.assertEqual(fidelity(leaking, target)[0], 0)
+
+    def test_target_fidelity_has_no_reference_learning_credit(self):
+        labels = torch.tensor([0, 1])
+        self.assertAlmostEqual(target_fidelity(torch.full((2, 4), .25), labels)[0], 0)
+        self.assertEqual(target_fidelity(torch.nn.functional.one_hot(labels, 4).float(), labels)[0], 1)
+        wrong = torch.nn.functional.one_hot(torch.tensor([2, 2]), 4).float()
+        self.assertLess(target_fidelity(wrong, labels)[0], 0)
 
 
 from src.model import ToyTransformer

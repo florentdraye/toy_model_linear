@@ -18,7 +18,7 @@ from src.config import GraphConfig, ModelConfig
 from src.data import enumerate_paths, split_indices, LatentFrequencySampler
 from src.graph import Graph
 from src.model import ToyTransformer
-from src.emergence import paired_bank, fit_directions, measure
+from src.emergence import paired_bank, fit_directions, optimize_directions, measure
 
 
 def parser():
@@ -48,6 +48,10 @@ def parser():
     p.add_argument('--train-frac', type=float, default=.8)
     p.add_argument('--device', default='cuda')
     p.add_argument('--resume', action='store_true')
+    p.add_argument('--save-models', action='store_true', help='retain model snapshots for offline checks')
+    p.add_argument('--direction-method', choices=['mean', 'optimized'], default='optimized')
+    p.add_argument('--direction-steps', type=int, default=150)
+    p.add_argument('--direction-lr', type=float, default=.03)
     return p
 
 
@@ -117,6 +121,7 @@ def main():
     opt = torch.optim.AdamW(groups, lr=a.lr, betas=(.9, .95), fused=a.device.startswith('cuda'))
     gen = torch.Generator(device=a.device).manual_seed(a.seed + 1234)
     result = {'config': config, 'model_config': asdict(mcfg), 'graph_config': asdict(gcfg),
+              'metric': 'target_brier_skill_v1',
               'git_commit': subprocess.check_output(['git', 'rev-parse', 'HEAD'], text=True).strip(),
               'host': socket.gethostname(), 'torch': torch.__version__,
               'gpu': torch.cuda.get_device_name() if a.device.startswith('cuda') else 'cpu',
@@ -147,16 +152,25 @@ def main():
         nonlocal running_loss, loss_n
         model.eval()
         with torch.autocast(device_type='cuda', dtype=torch.bfloat16, enabled=a.device.startswith('cuda')):
-            vectors = fit_directions(model, fit, a.steer_depth, positions, a.eval_batch)
-            metrics = measure(model, test, vectors, a.steer_depth, positions, a.eval_batch)
+            means = fit_directions(model, fit, a.steer_depth, positions, a.eval_batch)
+            direction_info = {}
+            vectors = means
+            if a.direction_method == 'optimized':
+                vectors, direction_info = optimize_directions(model, fit, means, a.steer_depth,
+                                                              positions, a.direction_steps, a.direction_lr)
+            metrics = measure(model, test, vectors, a.steer_depth, positions, a.eval_batch, means)
         rec = {'step': step, 'examples_seen': step * a.batch_size,
                'latent_counts': counts[order[ranks].to(a.device)].tolist(),
-               'train_loss': float(running_loss / max(loss_n, 1)), **metrics}
+               'train_loss': float(running_loss / max(loss_n, 1)), **metrics, **direction_info}
         result['history'].append(rec)
         result['complete'] = step == a.steps
         atomic_json(a.out_dir / 'history.json', result)
         (a.out_dir / 'directions').mkdir(exist_ok=True)
         torch.save(vectors.cpu(), a.out_dir / 'directions' / f'step{step:06d}.pt')
+        if a.save_models:
+            (a.out_dir / 'models').mkdir(exist_ok=True)
+            torch.save({k: v.detach().cpu() for k, v in model.state_dict().items()},
+                       a.out_dir / 'models' / f'step{step:06d}.pt')
         state = {'model': model.state_dict(), 'optimizer': opt.state_dict(), 'step': step,
                  'sampler_rng': gen.get_state(), 'torch_rng': torch.get_rng_state(),
                  'cuda_rng': torch.cuda.get_rng_state_all() if a.device.startswith('cuda') else [],

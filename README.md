@@ -52,9 +52,18 @@ one through the same most-frequent reference latent, keeping all subsequent edge
 choices identical. Both evaluation paths are held out. Direction fitting uses
 separate pairs whose two paths are in training. At every checkpoint,
 `v_k = mean(h_target - h_reference)` is the exact least-squares optimal constant
-additive translation of those matched activations. It is **not** claimed to be
-globally optimal for the nonlinear downstream network. No target-output loss,
-test-set selection, strength tuning, or future checkpoints enter the vector fit.
+additive translation of those matched activations. This is the `mean` control.
+The default `--direction-method optimized` initializes there and fits a single
+constant vector through the frozen downstream network to the correct counterfactual
+endpoint, using the first 75% of calibration pairs. The remaining 25% select the
+best iterate per latent. Projected Adam constrains the norm to the RMS size of a
+natural matched hidden change (no unbounded strength search). `--direction-steps`
+and `--direction-lr` control the solve; validation improvements, selected iterations,
+and norm budgets are saved. This is a numerical optimization, **not** a global
+optimality guarantee. It measures supervised controllability, whereas the mean
+control measures representation-derived steering. Model weights are frozen; no
+final-test pairs or future checkpoints are used. Final test data are scored only
+after fitting and validation selection.
 
 Default `--site suffix` edits the residual positions from the latent's token to
 the end, at one transformer depth. The vector is the flattened residual slice
@@ -63,16 +72,20 @@ the intervention reach parallel copies of the latent at later token positions.
 `--site token` gives a single d_model-dimensional vector at token layer−1;
 `--site all` includes every token. The site is fixed throughout each run.
 
-Both scores use `1 - Σ||Δp_model - Δonehot_graph||² / Σ||Δonehot_graph||²`,
-where Δ is either the actual input change (generalization) or the hidden edit
-(steering), relative to the same reference prediction. Thus no effect scores 0,
-an exact teacher effect scores 1, and mistakes can score below 0. Headline plots
+Both scores use the normalized multiclass Brier skill
+`1 - mean||p - onehot(target_endpoint)||² / (1 - 1/n_classes)`, where p is
+either the prediction on the held-out target input (generalization) or the
+edited reference input (steering). Uniform prediction scores 0, perfect target
+prediction scores 1, and mistakes can score below 0. Headline plots
 floor negative scores at 0; JSON and `raw_fidelity.png` retain them. Coincident
 teacher endpoints are retained to penalize off-target effects. An exact,
 context-dependent activation patch and a norm-matched random-vector control
-diagnose intervention-site limits and nonspecific effects. The frequent reference
-must itself be learned, so these are paired-effect gains, not isolated-node accuracies;
-the latter are saved separately.
+diagnose intervention-site limits and nonspecific effects. The paired-effect
+fidelity from granularity, `1 - Σ||Δp - Δonehot||² / Σ||Δonehot||²`, is retained
+in `gain_effect_raw` / `steer_effect_raw`. It is not the headline here: learning
+only the common reference can contribute about half of that score even when the
+target latent is unlearned. Target fidelity removes that reference-only credit.
+Target and reference accuracies are saved separately.
 
 Submit on the cluster (never train on the login node or laptop):
 
@@ -82,10 +95,13 @@ condor_submit_bid 2000 submit_emergence.sub
 ```
 
 The wrapper uses granularity's existing PyTorch venv. Results are written to
-`/fast/fdraye/toy_model_linear/emergence_pilot`: incremental `history.json`,
+`/fast/fdraye/toy_model_linear/emergence_opt_pilot`: incremental `history.json`,
 resumable `resume.pt`, exact pair IDs in `banks.pt`, one fitted vector per latent
 per checkpoint in `directions/`, and PNG/PDF figures. Use `--resume` with the same
-configuration to continue an interrupted run. The learning rate is constant after
+configuration to continue an interrupted run. `--save-models` additionally retains
+model snapshots for offline measurements. Pair counts are capped equally across
+latents when a selected latent has fewer distinct pairs than requested; actual
+counts are recorded. The learning rate is constant after
 100 warmup steps. Existing result directories are protected against accidental reuse.
 
 ```bash

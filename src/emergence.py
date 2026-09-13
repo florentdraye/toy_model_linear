@@ -109,34 +109,137 @@ def fidelity(delta, target):
     return float(1 - ratio), float(se)
 
 
+def target_fidelity(probabilities, labels):
+    """Multiclass Brier skill against the a-priori uniform prediction.
+
+    Unlike a paired-effect fidelity, learning the common reference alone cannot
+    create half a unit of apparent target generalization. Uniform prediction is
+    exactly zero and a perfect target prediction is exactly one.
+    """
+    target = F.one_hot(labels, probabilities.shape[-1]).double()
+    errors = (probabilities.double() - target).square().sum(-1)
+    null_error = 1 - 1 / probabilities.shape[-1]
+    return (float(1 - errors.mean() / null_error),
+            float(errors.std(unbiased=True) / len(errors) ** .5 / null_error))
+
+
+def from_hidden(model, h, depth):
+    """Continue the existing transformer from a post-block residual state."""
+    for block in model.blocks[depth:]:
+        h = block(h)
+    last = model.ln_f(h)[:, -1]
+    if model.frozen_mlp is not None:
+        last = model.frozen_mlp(last)
+    return model.head(last)
+
+
+def optimize_directions(model, bank, means, depth, positions, steps=150,
+                        lr=.03, batch_size=128):
+    """Fit constant causal vectors with frozen weights and held-out validation.
+
+    One vector per target, initialized at the mean shift and constrained to the
+    RMS norm of a natural paired hidden change. The final quarter of calibration
+    pairs selects iterates; no final-test paths or future models are consulted.
+    This is a numerical optimum, not a global-optimality guarantee. It measures
+    supervised controllability and is reported beside the unsupervised mean edit.
+    """
+    device = means.device
+    k, n = bank['off'].shape[:2]
+    full_positions = list(range(model.cfg.seq_len)) if hasattr(model, 'cfg') else list(range(bank['off'].shape[-1]))
+    hs, radii = [], []
+    with torch.no_grad():
+        for off, on in zip(bank['off'], bank['on']):
+            hh, norms = [], []
+            for a, b in zip(off.split(1024), on.split(1024)):
+                _, ha = forward_at(model, a, depth, full_positions, capture=True)
+                _, hb = forward_at(model, b, depth, full_positions, capture=True)
+                hh.append(ha)
+                norms.append((hb[:, positions].float()-ha[:, positions].float()).flatten(1).square().sum(1))
+            hs.append(torch.cat(hh))
+            radii.append(torch.cat(norms).mean().sqrt())
+        hidden = torch.stack(hs)
+        radius = torch.stack(radii).clamp_min(1e-8).view(k, 1, 1)
+    n_train = max(1, int(n * .75))
+    if n_train == n:
+        raise ValueError('vector calibration needs a validation pair')
+    unit = torch.nn.Parameter(means / radius)
+    optimizer = torch.optim.Adam([unit], lr=lr)
+    flags = [p.requires_grad for p in model.parameters()]
+    for p in model.parameters():
+        p.requires_grad_(False)
+    gen = torch.Generator(device=device).manual_seed(817)
+    row = torch.arange(k, device=device)[:, None]
+
+    def loss_at(indices):
+        h = hidden[row, indices].clone()
+        h[:, :, positions] += (unit * radius)[:, None].to(h.dtype)
+        probabilities = from_hidden(model, h.flatten(0, 1), depth).float().softmax(-1)
+        labels = bank['y_on'][row, indices].flatten()
+        targets = F.one_hot(labels, probabilities.shape[-1]).float()
+        return (probabilities-targets).square().sum(-1).reshape(k, -1).mean(1)
+
+    validation = torch.arange(n_train, n, device=device)[None].expand(k, -1)
+    best, best_step = unit.detach().clone(), torch.zeros(k, dtype=torch.long, device=device)
+    try:
+        with torch.no_grad():
+            initial_loss = loss_at(validation)
+            best_loss = initial_loss.clone()
+        for step in range(1, steps + 1):
+            indices = torch.randint(n_train, (k, min(batch_size, n_train)), generator=gen, device=device)
+            loss = loss_at(indices).mean()
+            optimizer.zero_grad(set_to_none=True)
+            loss.backward()
+            optimizer.step()
+            with torch.no_grad():
+                unit.div_(unit.flatten(1).norm(dim=1).clamp_min(1).view(k, 1, 1))
+                if step % 10 == 0 or step == steps:
+                    val = loss_at(validation)
+                    improved = val < best_loss
+                    best[improved] = unit.detach()[improved]
+                    best_loss[improved] = val[improved]
+                    best_step[improved] = step
+    finally:
+        for p, flag in zip(model.parameters(), flags):
+            p.requires_grad_(flag)
+    return best * radius, {'direction_radius': radius.flatten().tolist(),
+                          'direction_validation_before': initial_loss.tolist(),
+                          'direction_validation_after': best_loss.tolist(),
+                          'direction_best_step': best_step.tolist()}
+
+
 @torch.no_grad()
-def measure(model, bank, vectors, depth, positions, batch_size=2048):
+def measure(model, bank, vectors, depth, positions, batch_size=2048, means=None):
     out = {k: [] for k in ('gain_raw', 'steer_raw', 'patch_raw', 'random_raw',
-                           'gain_se', 'steer_se', 'accuracy', 'effect_fraction')}
+                           'gain_se', 'steer_se', 'accuracy', 'reference_accuracy',
+                           'effect_fraction', 'gain_effect_raw', 'steer_effect_raw', 'mean_raw')}
     # A norm-matched permutation control, fixed across checkpoints.
     rng = torch.Generator(device=vectors.device).manual_seed(991)
     random = torch.randn(vectors.shape, generator=rng, device=vectors.device)
     random *= (vectors.flatten(1).norm(dim=1) /
                random.flatten(1).norm(dim=1)).view(-1, 1, 1)
     for j, (off, on) in enumerate(zip(bank['off'], bank['on'])):
-        probs = {k: [] for k in ('off', 'on', 'steer', 'patch', 'random')}
+        probs = {k: [] for k in ('off', 'on', 'steer', 'patch', 'random', 'mean')}
         for a, b in zip(off.split(batch_size), on.split(batch_size)):
             la, ha = forward_at(model, a, depth, positions, capture=True)
             lb, hb = forward_at(model, b, depth, positions, capture=True)
             probs['off'].append(la.float().softmax(-1))
             probs['on'].append(lb.float().softmax(-1))
-            for key, v in [('steer', vectors[j]), ('patch', hb - ha), ('random', random[j])]:
+            for key, v in [('steer', vectors[j]), ('patch', hb - ha), ('random', random[j]),
+                           ('mean', vectors[j] if means is None else means[j])]:
                 logits = forward_at(model, a, depth, positions, delta=v)
                 probs[key].append(logits.float().softmax(-1))
         probs = {k: torch.cat(v) for k, v in probs.items()}
         target = (F.one_hot(bank['y_on'][j], probs['on'].shape[-1]) -
                   F.one_hot(bank['y_off'][j], probs['on'].shape[-1])).float()
-        for key, pred in [('gain', 'on'), ('steer', 'steer'), ('patch', 'patch'), ('random', 'random')]:
-            raw, se = fidelity(probs[pred] - probs['off'], target)
+        for key, pred in [('gain', 'on'), ('steer', 'steer'), ('patch', 'patch'), ('random', 'random'), ('mean', 'mean')]:
+            raw, se = target_fidelity(probs[pred], bank['y_on'][j])
             out[key + '_raw'].append(raw)
             if key in ('gain', 'steer'):
                 out[key + '_se'].append(se)
+                effect_raw, _ = fidelity(probs[pred] - probs['off'], target)
+                out[key + '_effect_raw'].append(effect_raw)
         out['accuracy'].append(float((probs['on'].argmax(-1) == bank['y_on'][j]).float().mean()))
+        out['reference_accuracy'].append(float((probs['off'].argmax(-1) == bank['y_off'][j]).float().mean()))
         out['effect_fraction'].append(float((bank['y_on'][j] != bank['y_off'][j]).float().mean()))
     out['vector_norm'] = vectors.flatten(1).norm(dim=1).tolist()
     return out

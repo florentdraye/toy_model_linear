@@ -2,7 +2,7 @@
 # condor_submit_bid 2000 submit_emergence.sub
 universe = vanilla
 executable = /bin/bash
-arguments = run_emergence.sh --out-dir /fast/fdraye/toy_model_linear/emergence_pilot --steps 4000 --eval-every 50
+arguments = run_emergence.sh --out-dir /fast/fdraye/toy_model_linear/emergence_opt_pilot --steps 10000 --eval-every 100 --frequency-ratio 30 --fit-pairs 1024 --eval-pairs 768 --save-models
 initialdir = /lustre/home/fdraye/projects/toy_model_linear
 request_gpus = 1
 request_cpus = 4

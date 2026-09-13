@@ -36,12 +36,15 @@ def plot(paths, out, window=1):
         raise ValueError('smoothing window must be a positive odd number')
     data = [json.loads(Path(p).read_text()) for p in paths]
     ref = data[0]
+    if ref.get('metric') != 'target_brier_skill_v1':
+        raise ValueError('expected target Brier skill history; older effect-only pilots cannot be pooled')
     for d in data[1:]:
-        for key in ('latents', 'frequency', 'positions', 'reference', 'graph_config', 'model_config'):
+        for key in ('metric', 'latents', 'frequency', 'positions', 'reference', 'graph_config', 'model_config'):
             if d[key] != ref[key]:
                 raise ValueError(f'cannot pool differing {key}')
         for key in ('data_seed', 'graph_layer', 'steer_depth', 'site', 'lr', 'weight_decay',
-                    'batch_size', 'train_frac', 'fit_pairs', 'eval_pairs', 'frequency_ratio'):
+                    'batch_size', 'train_frac', 'fit_pairs', 'eval_pairs', 'frequency_ratio',
+                    'direction_method', 'direction_steps', 'direction_lr'):
             if d['config'][key] != ref['config'][key]:
                 raise ValueError(f'cannot pool differing {key}')
     seeds = [d['config']['seed'] for d in data]
@@ -50,7 +53,7 @@ def plot(paths, out, window=1):
     shared = sorted(set.intersection(*[{h['step'] for h in d['history']} for d in data]))
     steps = np.array(shared)
     arrays = {}
-    for key in ('gain_raw', 'steer_raw', 'patch_raw', 'random_raw', 'accuracy'):
+    for key in ('gain_raw', 'steer_raw', 'patch_raw', 'random_raw', 'mean_raw', 'accuracy'):
         arrays[key] = np.array([[{h['step']: h for h in d['history']}[t][key]
                                  for t in shared] for d in data])
     out = Path(out)
@@ -80,7 +83,7 @@ def plot(paths, out, window=1):
         ax.set(title=title, xlabel='Training steps', ylim=(-.025, 1.025))
         ax.grid(axis='y', color='#e8ebef', linewidth=.6)
         ax.axhline(.5, color='#b0b6c1', ls=':', lw=.8)
-    axes[0].set_ylabel('Teacher-effect fidelity (negative values floored at 0)')
+    axes[0].set_ylabel('Target fidelity (Brier skill, floored at 0)')
     cbar = fig.colorbar(plt.cm.ScalarMappable(norm=norm, cmap=cmap), ax=axes,
                         fraction=.025, pad=.025)
     cbar.set_label('Latent training frequency')
@@ -102,6 +105,7 @@ def plot(paths, out, window=1):
         for key, label, style, color in [('gain_raw', 'Generalization', '-', '#26364a'),
                                          ('steer_raw', 'Steering', '-', colors[j]),
                                          ('patch_raw', 'Exact patch', '--', '#959aa4'),
+                                         ('mean_raw', 'Mean vector', '-.', '#8c76b7'),
                                          ('random_raw', 'Random direction', ':', '#cb826d')]:
             y = np.clip(arrays[key], 0, 1).mean(0)[:, j]
             ax.plot(steps, smooth(y, window), style, color=color, lw=1.7, label=label)
@@ -140,7 +144,9 @@ def plot(paths, out, window=1):
     (out / 'figure_notes.txt').write_text(
         f"Sources: {', '.join(str(p) for p in paths)}\n"
         f"Display smoothing: {window}-checkpoint centered moving average; raw dots retained.\n"
-        "Fidelity = 1 - sum ||delta p - delta one_hot(graph endpoint)||² / sum ||delta one_hot||².\n"
+        "Fidelity = 1 - mean ||p - one_hot(counterfactual graph endpoint)||² / (1 - 1/num_classes).\n"
+        "Zero: uniform prediction. One: perfect endpoint prediction. Same score for input change and hidden edit.\n"
+        "Paired-effect fidelities are retained separately in JSON: gain_effect_raw / steer_effect_raw.\n"
         "Headline floors each seed's aggregate fidelity at zero before averaging; raw_fidelity.png retains negatives.\n"
         "Shading: +/-1.96 standard errors across seeds (absent for one seed); contexts are fixed across time.\n"
         "Timing: unsmoothed raw fidelity crosses 0.5 for three checkpoints; no own-ceiling rescaling.\n"
