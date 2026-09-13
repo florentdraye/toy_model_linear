@@ -108,7 +108,9 @@ def main():
                 raise ValueError(f'cannot resume with changed {k}')
     torch.set_num_threads(4)
     torch.manual_seed(a.seed)
-    torch.set_float32_matmul_precision('high')
+    # Full-support means use the same FP32 arithmetic as checkpoint replays.
+    # Training and evaluation retain their explicit BF16 autocast below.
+    torch.set_float32_matmul_precision('highest')
     a.out_dir.mkdir(parents=True, exist_ok=True)
     gcfg = GraphConfig(a.n_layers, (1,) + (a.nodes,) * (a.n_layers - 1), a.edges, a.graph_seed)
     graph = Graph(gcfg)
