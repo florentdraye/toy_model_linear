@@ -1,8 +1,8 @@
-# mkdir -p /fast/fdraye/toy_model_linear/logs
-# condor_submit_bid 2000 submit_emergence.sub
+# Fresh confirmation seeds after validation-only site selection on seed 42.
+# condor_submit_bid 2000 submit_emergence_seeds.sub
 universe = vanilla
 executable = /bin/bash
-arguments = run_emergence.sh --out-dir /fast/fdraye/toy_model_linear/emergence_uniform --seed 43 --frequency-ratio 1 --steps 10000 --save-models
+arguments = run_emergence.sh --out-dir /fast/fdraye/toy_model_linear/emergence_s$(seed) --seed $(seed) --save-models
 initialdir = /lustre/home/fdraye/projects/toy_model_linear
 request_gpus = 1
 request_cpus = 4
@@ -14,4 +14,4 @@ stream_error = True
 output = /fast/fdraye/toy_model_linear/logs/emergence_$(Cluster).$(Process).out
 error = /fast/fdraye/toy_model_linear/logs/emergence_$(Cluster).$(Process).err
 log = /fast/fdraye/toy_model_linear/logs/emergence_$(Cluster).$(Process).log
-queue
+queue seed in 43,44,45

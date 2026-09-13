@@ -36,10 +36,10 @@ Not tracked: `runs/`, `logs/`, `__pycache__/`, `.claude/`, and any `*.pt` / `*.p
 ### Focused latent-frequency / steering experiment
 
 `train_emergence.py` reuses the DAG and transformer, with one selected graph
-layer (default 3), one fixed post-block intervention (default block 3 of 6),
+layer (default 3), one fixed post-block intervention (default block 1 of 6),
 and paired steering/generalization curves. It does not run the old probe cube.
 
-Training draws a latent first from a shuffled geometric law (100× most-to-least
+Training draws a latent first from a shuffled geometric law (30× most-to-least
 frequent), then a uniform path from that latent's training support. This corrects
 for unequal numbers of paths reaching different graph nodes. The complete path
 support is split before sampling; duplicates within training are intentional.
@@ -65,11 +65,20 @@ control measures representation-derived steering. Model weights are frozen; no
 final-test pairs or future checkpoints are used. Final test data are scored only
 after fitting and validation selection.
 
-Default `--site suffix` edits the residual positions from the latent's token to
+Default `--site token` uses a single 128-dimensional vector at token index 2,
+where the prefix has just reached graph layer 3. These are separate coordinates:
+graph layer 3 is the middle latent; transformer block 1 is the intervention depth.
+A seed-42 pilot found that a constant edit at block 3 was ineffective despite
+successful exact patches. `calibrate_emergence.py` scanned depths 1–5, three
+token layouts, and norm budgets 1×/3× on calibration validation only. Block 1
+with a single token and 1× budget achieved ≥0.99 validation fidelity for the
+five learned pilot latents; it was chosen for the simple vector experiment.
+Fresh confirmation seeds are 43–45. Site selection did not inspect their results.
+
+Optional `--site suffix` edits the residual positions from the latent's token to
 the end, at one transformer depth. The vector is the flattened residual slice
 (four positions × 128 dimensions by default), reshaped on insertion. This lets
 the intervention reach parallel copies of the latent at later token positions.
-`--site token` gives a single d_model-dimensional vector at token layer−1;
 `--site all` includes every token. The site is fixed throughout each run.
 
 Both scores use the normalized multiclass Brier skill
@@ -91,11 +100,12 @@ Submit on the cluster (never train on the login node or laptop):
 
 ```bash
 mkdir -p /fast/fdraye/toy_model_linear/logs
-condor_submit_bid 2000 submit_emergence.sub
+condor_submit_bid 2000 submit_emergence_seeds.sub  # three skewed-frequency seeds
+condor_submit_bid 2000 submit_emergence.sub        # uniform-frequency control
 ```
 
 The wrapper uses granularity's existing PyTorch venv. Results are written to
-`/fast/fdraye/toy_model_linear/emergence_opt_pilot`: incremental `history.json`,
+`/fast/fdraye/toy_model_linear/emergence_s43` (and s44, s45, emergence_uniform): incremental `history.json`,
 resumable `resume.pt`, exact pair IDs in `banks.pt`, one fitted vector per latent
 per checkpoint in `directions/`, and PNG/PDF figures. Use `--resume` with the same
 configuration to continue an interrupted run. `--save-models` additionally retains
