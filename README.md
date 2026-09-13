@@ -35,6 +35,12 @@ Not tracked: `runs/`, `logs/`, `__pycache__/`, `.claude/`, and any `*.pt` / `*.p
 
 ### Focused latent-frequency / steering experiment
 
+The completed last-token mean replay is documented in
+[MEAN_STEERING_RESULTS.md](MEAN_STEERING_RESULTS.md), with the current
+[steering/generalization figure](runs/emergence_summary/steering_gain.png).
+Generalization is unchanged; this simple edit and the exact last-token patch
+both fail at block 1. The older optimized result is archived separately.
+
 The simple default is now **difference of means, last token only**:
 `--direction-method uniform-mean --site last`. The graph latent remains at layer
 3 and the edit remains after transformer block 1; these are different coordinates.
@@ -169,7 +175,7 @@ condor_submit_bid 2000 submit_emergence_robust.sub
 # After all four source training jobs finish:
 condor_submit_bid 2000 submit_emergence_refine.sub
 # After downloading the three refined histories:
-python3 plot_emergence.py runs/emergence_refined_s*/history.json --out-dir runs/emergence_summary --smooth-window 3
+python3 plot_emergence.py runs/emergence_refined_s*/history.json --out-dir runs/emergence_optimized_summary --smooth-window 3
 ```
 
 The wrapper uses granularity's existing PyTorch venv. Results are written to

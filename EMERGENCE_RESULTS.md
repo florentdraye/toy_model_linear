@@ -1,4 +1,9 @@
-# Steering and generalization at graph layer 3
+# Previous optimized steering and generalization at graph layer 3
+
+This report describes the **previous supervised, four-token optimization**.
+The current requested difference-of-means / last-token results are in
+[MEAN_STEERING_RESULTS.md](MEAN_STEERING_RESULTS.md); those do not show successful
+steering at block 1. The optimized artifacts below have been preserved separately.
 
 The completed 10× frequency experiment produces distinct, smooth learning curves
 for eight latents across three seeds. Steering and generalization emerge on similar
@@ -8,11 +13,11 @@ latent–seed pairs cross both 0.5 thresholds. The median paired ratio
 frequent latent consistently steers later, while several rare latents steer earlier.
 These are descriptive results on one graph, not a universal timing law.
 
-Open the [side-by-side curves](runs/emergence_summary/steering_gain.png),
-[per-latent overlays and controls](runs/emergence_summary/per_latent.png), or
-[emergence-time comparison](runs/emergence_summary/emergence_times.png).
+Open the [side-by-side curves](runs/emergence_optimized_summary/steering_gain.png),
+[per-latent overlays and controls](runs/emergence_optimized_summary/per_latent.png), or
+[emergence-time comparison](runs/emergence_optimized_summary/emergence_times.png).
 PDF versions are in the same directory. The full, unsmoothed paired measurements
-are in [timing.csv](runs/emergence_summary/timing.csv).
+are in [timing.csv](runs/emergence_optimized_summary/timing.csv).
 
 Median crossing steps across seeds 46, 47, and 48:
 
@@ -128,7 +133,7 @@ Both submit files passed Condor dry-run validation. Plot with:
 
 ```bash
 python3 plot_emergence.py runs/emergence_refined_s*/history.json \
-  --out-dir runs/emergence_summary --smooth-window 3
+  --out-dir runs/emergence_optimized_summary --smooth-window 3
 ```
 
 Training jobs were **17552865.0–2** on H100 nodes g206, g202, and i202; refinements
