@@ -22,6 +22,7 @@ def compare(source_path, averaged_path, out):
     src = {r['step']: r for r in source['history']}
     rows = averaged['history']
     steps = np.array([r['step'] for r in rows])
+    coverage = f'{len(steps)}/{len(src)} saved checkpoints'
     raw = [src[t] for t in steps]
     decay = averaged['model_transform']['decay']
     freq = np.array(source['frequency'])
@@ -49,7 +50,7 @@ def compare(source_path, averaged_path, out):
     fig.colorbar(plt.cm.ScalarMappable(norm=norm, cmap='viridis_r'), ax=axes,
                  fraction=.018, label='Latent training frequency')
     fig.suptitle(f"Width {source['model_config']['d_model']} · seed {source['config']['seed']} · "
-                 f"{len(freq)} latents\nFresh difference-of-means vectors · strength 1 · "
+                 f"{len(freq)} latents · {coverage}\nFresh difference-of-means vectors · strength 1 · "
                  'fixed held-out examples · no curve smoothing', fontsize=12)
     fig.savefig(out / 'weight_ema_comparison.png', dpi=200)
     fig.savefig(out / 'weight_ema_comparison.pdf')
@@ -57,6 +58,7 @@ def compare(source_path, averaged_path, out):
     mask = (steps[:-1] >= 10000) & (np.diff(steps) == source['config']['eval_every'])
     summary = {'source': str(source_path), 'averaged': str(averaged_path),
                'complete': averaged.get('complete', False), 'steps': steps.tolist(),
+               'full_training_trajectory': sorted(steps.tolist()) == sorted(src),
                'adjacent_late_transitions': int(mask.sum()), 'metrics': {}}
     for label, a in values.items():
         summary['metrics'][label] = dict(final_mean=float(a[-1].mean()),

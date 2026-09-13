@@ -1,0 +1,21 @@
+# Longer causal model-weight average to test transition stability.
+# Every disjoint chunk includes all earlier snapshots starting at step 0.
+universe = vanilla
+executable = /bin/bash
+arguments = run_emergence_locations.sh /fast/fdraye/toy_model_linear/emergence_large_means_s$(seed) --out-dir /fast/fdraye/toy_model_linear/$(name) --weight-ema-decay $(decay) --step-range $(first) $(last)
+initialdir = /lustre/home/fdraye/projects/toy_model_linear
+request_gpus = 1
+request_cpus = 4
+request_memory = 32 GB
+requirements = (CUDACapability == 9.0) && (Machine =!= "i101.internal.cluster.is.localnet") && (Machine =!= "g155.internal.cluster.is.localnet") && (Machine =!= "i205.internal.cluster.is.localnet") && (Machine =!= "i207.internal.cluster.is.localnet")
++IsDocker = False
+stream_output = True
+stream_error = True
+output = /fast/fdraye/toy_model_linear/logs/emergence_weight_ema_full_$(Cluster).$(Process).out
+error = /fast/fdraye/toy_model_linear/logs/emergence_weight_ema_full_$(Cluster).$(Process).err
+log = /fast/fdraye/toy_model_linear/logs/emergence_weight_ema_full_$(Cluster).$(Process).log
+queue seed,decay,first,last,name from (
+46 0.95 0 6600 emergence_weight_ema_0.95_s46_part0
+46 0.95 6800 13200 emergence_weight_ema_0.95_s46_part1
+46 0.95 13400 20000 emergence_weight_ema_0.95_s46_part2
+)
