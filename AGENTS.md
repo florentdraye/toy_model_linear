@@ -50,6 +50,7 @@ The cluster login banner says not to launch compute-intensive work on login node
 ## Operational notes
 
 - Include the actual plot inline with experimental results so the user can verify them visually; a report link alone is insufficient.
+- Steering location is not restricted to the last token: the user wants steering evaluated across locations and the best token position shown.
 - Interactive allocations and SSH sessions do not survive assistant sessions reliably; reconnect and request a fresh allocation when necessary.
 - Report the Condor job/cluster ID, compute hostname, GPU, command launched, and output/run directory to the user.
 - Avoid committing generated artifacts. `runs/`, `logs/`, checkpoints, plots, and caches are intentionally ignored; confirm with `.gitignore` before adding files.

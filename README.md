@@ -35,6 +35,14 @@ Not tracked: `runs/`, `logs/`, `__pycache__/`, `.claude/`, and any `*.pt` / `*.p
 
 ### Focused latent-frequency / steering experiment
 
+The current [best-location replay](BEST_SITE_RESULTS.md) scans all **42 residual
+depth/token locations**, including embeddings, and shows the best single-token
+edit selected separately for each model, latent, and checkpoint. Selection uses
+training calibration pairs; curves use held-out pairs. Unit-strength results
+and a separate strength-selected control are both shown, with analytic mean
+vectors throughout. Open the [overview](runs/emergence_best_site_summary/best_site_steering.png)
+and [selected positions](runs/emergence_best_site_summary/selected_positions.png).
+
 The [intervention audit and full checkpoint replay](MEAN_INTERVENTION_RESULTS.md)
 reproduce successful **analytic target-minus-reference means at tokens 2–5**,
 block 1, strength 1, without optimization. The independent FP32 final-checkpoint
