@@ -1,5 +1,10 @@
 # Last-token mean steering: depth scan
 
+Follow-up: an [independent intervention audit](MEAN_INTERVENTION_RESULTS.md)
+reproduces successful analytic mean steering using target-minus-reference means
+at tokens 2–5. It also reproduces the negative last-token result in FP32. The
+depth scan below applies specifically to last-token, target-minus-rest edits.
+
 Changing intervention depth does not rescue the current difference-of-means
 edit. On the final checkpoints of seeds 46–48, all 144 latent/seed/depth
 steering scores are negative (largest: -0.63021). There is **no supported depth

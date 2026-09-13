@@ -1,5 +1,9 @@
 # Difference of means, last token only
 
+The [subsequent intervention audit](MEAN_INTERVENTION_RESULTS.md) recovers the
+earlier successful mean control with target-minus-reference means at tokens 2–5.
+It separates the two changes made in this last-token simplification.
+
 Follow-up: the [completed depth scan](MEAN_DEPTH_RESULTS.md) finds that the same
 mean edit fails at all six final-checkpoint depths on training calibration pairs.
 Exact patches succeed only at block 6. The held-out replay below is preserved.

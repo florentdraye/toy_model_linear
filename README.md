@@ -35,6 +35,14 @@ Not tracked: `runs/`, `logs/`, `__pycache__/`, `.claude/`, and any `*.pt` / `*.p
 
 ### Focused latent-frequency / steering experiment
 
+The [intervention audit and full checkpoint replay](MEAN_INTERVENTION_RESULTS.md)
+reproduce successful **analytic target-minus-reference means at tokens 2–5**,
+block 1, strength 1, without optimization. The independent FP32 final-checkpoint
+held-out Brier skill is 0.95873. This four-token comparison differs explicitly
+from the last-token-only condition below. Open the
+[new steering/generalization plot](runs/emergence_reference_means_summary/steering_gain.png)
+and [controlled comparison](runs/emergence_intervention_audit_summary/intervention_diagnosis.png).
+
 The follow-up [six-depth scan](MEAN_DEPTH_RESULTS.md) is complete: final-checkpoint
 last-token mean steering fails at every block in all three seeds. Exact patches
 work only at block 6, where they reproduce the classifier's target input.
