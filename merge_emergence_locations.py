@@ -4,9 +4,6 @@ import json
 from pathlib import Path
 import shutil
 
-from train_emergence import atomic_json
-
-
 def merge(paths, out):
     chunks = [json.loads((p / 'history.json').read_text()) for p in paths]
     ref = chunks[0]
@@ -54,7 +51,10 @@ def merge(paths, out):
               'chunks': [dict(path=str(p), host=c['host'], gpu=c['gpu'], git_commit=c['git_commit'],
                               steps=[r['step'] for r in c['history']]) for p, c in zip(paths, chunks)],
               'model_transform': {**ref['model_transform'], 'input_steps': expected}}
-    atomic_json(out / 'history.json', result)
+    # Keep this metadata-only merger free of NumPy/PyTorch imports on login nodes.
+    tmp = out / 'history.tmp'
+    tmp.write_text(json.dumps(result, indent=2, allow_nan=False)+'\n')
+    tmp.replace(out / 'history.json')
     print(f'Merged {len(expected)} checkpoints into {out}')
 
 

@@ -10,7 +10,7 @@ from matplotlib.colors import LogNorm
 import numpy as np
 
 
-def compare(source_path, averaged_path, out):
+def compare(source_path, averaged_path, out, others=()):
     source, averaged = [json.loads(Path(p).read_text()) for p in (source_path, averaged_path)]
     for key in ('latents', 'frequency', 'reference', 'model_config', 'evaluation_bank_sha256'):
         if source[key] != averaged[key]:
@@ -25,14 +25,26 @@ def compare(source_path, averaged_path, out):
     coverage = f'{len(steps)}/{len(src)} saved checkpoints'
     raw = [src[t] for t in steps]
     decay = averaged['model_transform']['decay']
+    conditions = [(raw, 'Original model'), (rows, f'Model-weight EMA {decay}')]
+    for other in others:
+        h = json.loads(Path(other).read_text())
+        for key in ('latents', 'frequency', 'reference', 'model_config', 'evaluation_bank_sha256'):
+            if h[key] != source[key]:
+                raise ValueError(f'incompatible {key}: {other}')
+        if h['config']['seed'] != source['config']['seed']:
+            raise ValueError('need paired model seeds')
+        if [r['step'] for r in h['history']] != steps.tolist():
+            raise ValueError('additional comparison needs identical checkpoint coverage')
+        conditions.append((h['history'], f"Model-weight EMA {h['model_transform']['decay']}"))
     freq = np.array(source['frequency'])
     norm = LogNorm(freq.min(), freq.max())
     colors = plt.get_cmap('viridis_r')(norm(freq))
     out = Path(out)
     out.mkdir(parents=True, exist_ok=True)
-    fig, axes = plt.subplots(2, 2, figsize=(12, 7), sharex=True, sharey=True, layout='constrained')
+    fig, axes = plt.subplots(len(conditions), 2, figsize=(12, 3.3*len(conditions)),
+                             sharex=True, sharey=True, layout='constrained')
     values = {}
-    for i, (rr, label) in enumerate(((raw, 'Original model'), (rows, f'Model-weight EMA {decay}'))):
+    for i, (rr, label) in enumerate(conditions):
         for j, (key, metric) in enumerate((('steer_raw', 'Mean steering'), ('gain_raw', 'Generalization'))):
             a = np.array([r[key] for r in rr])
             values[f'{label}: {metric}'] = a
@@ -57,6 +69,7 @@ def compare(source_path, averaged_path, out):
     plt.close(fig)
     mask = (steps[:-1] >= 10000) & (np.diff(steps) == source['config']['eval_every'])
     summary = {'source': str(source_path), 'averaged': str(averaged_path),
+               'other_averaged': [str(p) for p in others],
                'complete': averaged.get('complete', False), 'steps': steps.tolist(),
                'full_training_trajectory': sorted(steps.tolist()) == sorted(src),
                'adjacent_late_transitions': int(mask.sum()), 'metrics': {}}
@@ -75,5 +88,6 @@ if __name__ == '__main__':
     p.add_argument('source', type=Path)
     p.add_argument('averaged', type=Path)
     p.add_argument('--out-dir', type=Path, required=True)
+    p.add_argument('--other', type=Path, nargs='*', default=[])
     a = p.parse_args()
-    compare(a.source, a.averaged, a.out_dir)
+    compare(a.source, a.averaged, a.out_dir, a.other)
