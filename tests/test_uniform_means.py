@@ -9,6 +9,7 @@ from src.graph import Graph
 from src.model import ToyTransformer
 from src.uniform_means import UniformMeanBank, hidden_at
 from train_emergence import parser
+from scan_emergence_depths import calibration_ids
 
 
 class UniformMeanTest(unittest.TestCase):
@@ -90,6 +91,26 @@ class UniformMeanTest(unittest.TestCase):
         model.train()
         with self.assertRaises(ValueError):
             bank.fit(model, [0], 1, [2])
+
+    def test_final_block_patch_reproduces_target_logits(self):
+        model = self.setup_model()
+        off = torch.tensor([[0, 1, 2], [1, 0, 2]])
+        on = torch.tensor([[2, 2, 2], [2, 1, 2]])
+        depth = len(model.blocks)
+        _, ha = forward_at(model, off, depth, [2], capture=True)
+        logits, hb = forward_at(model, on, depth, [2], capture=True)
+        patched = forward_at(model, off, depth, [2], delta=hb-ha)
+        torch.testing.assert_close(patched, logits, atol=1e-6, rtol=1e-5)
+
+    def test_depth_scan_uses_training_calibration_tail(self):
+        saved = dict(train=torch.arange(16), test=torch.tensor([[[16, 17]]]),
+                     fit=torch.arange(16).reshape(1, 8, 2))
+        train, pairs = calibration_ids(saved, 18)
+        self.assertTrue(torch.equal(pairs, saved['fit'][:, 6:]))
+        self.assertTrue(torch.equal(train, saved['train']))
+        saved['fit'][0, -1, -1] = 17
+        with self.assertRaises(ValueError):
+            calibration_ids(saved, 18)
 
 
 if __name__ == '__main__':

@@ -1,0 +1,17 @@
+# Final-checkpoint diagnosis, blocks 1-6, training calibration pairs only.
+# Submit from the cluster clone: condor_submit_bid 2000 submit_emergence_depths.sub
+universe = vanilla
+executable = /bin/bash
+arguments = run_emergence_depths.sh /fast/fdraye/toy_model_linear/emergence_wide_$(run_tag) --out-dir /fast/fdraye/toy_model_linear/emergence_mean_depths_$(run_tag)
+initialdir = /lustre/home/fdraye/projects/toy_model_linear
+request_gpus = 1
+request_cpus = 4
+request_memory = 24 GB
+requirements = (CUDACapability == 9.0) && (Machine =!= "i101.internal.cluster.is.localnet") && (Machine =!= "g155.internal.cluster.is.localnet") && (Machine =!= "i205.internal.cluster.is.localnet")
++IsDocker = False
+stream_output = True
+stream_error = True
+output = /fast/fdraye/toy_model_linear/logs/emergence_depths_$(Cluster).$(Process).out
+error = /fast/fdraye/toy_model_linear/logs/emergence_depths_$(Cluster).$(Process).err
+log = /fast/fdraye/toy_model_linear/logs/emergence_depths_$(Cluster).$(Process).log
+queue run_tag in s46,s47,s48
