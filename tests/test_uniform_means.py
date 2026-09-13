@@ -10,6 +10,8 @@ from src.model import ToyTransformer
 from src.uniform_means import UniformMeanBank, hidden_at
 from train_emergence import parser
 from scan_emergence_depths import calibration_ids
+from audit_emergence_interventions import score_edit
+from src.emergence import measure
 
 
 class UniformMeanTest(unittest.TestCase):
@@ -111,6 +113,23 @@ class UniformMeanTest(unittest.TestCase):
         saved['fit'][0, -1, -1] = 17
         with self.assertRaises(ValueError):
             calibration_ids(saved, 18)
+
+    def test_independent_continuation_matches_hook_measurements(self):
+        model = self.setup_model()
+        off = torch.tensor([[[0, 1, 2], [1, 0, 2], [2, 0, 1]]])
+        on = torch.tensor([[[2, 2, 2], [2, 1, 2], [1, 1, 1]]])
+        bank = dict(off=off, on=on, y_off=torch.tensor([[0, 1, 0]]),
+                    y_on=torch.tensor([[1, 2, 2]]))
+        v = torch.randn(1, 3, 8) * .1
+        for depth in (1, 2):
+            ha = hidden_at(model, off[0], depth)[None]
+            hb = hidden_at(model, on[0], depth)[None]
+            for pos in ([2], [0, 1, 2]):
+                old = measure(model, bank, v[:, pos], depth, pos)
+                edit = score_edit(model, ha, hb, bank['y_on'], depth, pos, v)
+                patch = score_edit(model, ha, hb, bank['y_on'], depth, pos)
+                self.assertAlmostEqual(old['steer_raw'][0], edit['skill'][0], places=6)
+                self.assertAlmostEqual(old['patch_raw'][0], patch['skill'][0], places=6)
 
 
 if __name__ == '__main__':
