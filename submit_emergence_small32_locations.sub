@@ -1,0 +1,17 @@
+# Apply the same training-calibrated location search to the width-128 comparator.
+# condor_submit_bid 2000 submit_emergence_small32_locations.sub
+universe = vanilla
+executable = /bin/bash
+arguments = run_emergence_locations.sh /fast/fdraye/toy_model_linear/emergence_small32_means_s$(seed) --out-dir /fast/fdraye/toy_model_linear/emergence_small32_locations_s$(seed)
+initialdir = /lustre/home/fdraye/projects/toy_model_linear
+request_gpus = 1
+request_cpus = 4
+request_memory = 24 GB
+requirements = (CUDACapability == 9.0) && (Machine =!= "i101.internal.cluster.is.localnet") && (Machine =!= "g155.internal.cluster.is.localnet") && (Machine =!= "i205.internal.cluster.is.localnet") && (Machine =!= "i207.internal.cluster.is.localnet")
++IsDocker = False
+stream_output = True
+stream_error = True
+output = /fast/fdraye/toy_model_linear/logs/emergence_small32_locations_$(Cluster).$(Process).out
+error = /fast/fdraye/toy_model_linear/logs/emergence_small32_locations_$(Cluster).$(Process).err
+log = /fast/fdraye/toy_model_linear/logs/emergence_small32_locations_$(Cluster).$(Process).log
+queue seed in 46,47,48

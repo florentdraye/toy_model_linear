@@ -36,13 +36,14 @@ def main():
     if not torch.cuda.is_available():
         raise RuntimeError('submit this scan to a GPU compute node')
     source = json.loads((a.run / 'history.json').read_text())
+    model_dir = Path(source.get('model_directory', a.run / 'models'))
     if not source.get('complete') and a.steps is None:
         raise ValueError('unfinished training requires explicit saved steps')
     rows = [r for r in source['history'] if a.steps is None or r['step'] in a.steps]
     if not rows or (a.steps is not None and set(a.steps) != {r['step'] for r in rows}):
         raise ValueError('requested checkpoints unavailable')
     for r in rows:
-        if not (a.run / 'models' / f"step{r['step']:06d}.pt").is_file():
+        if not (model_dir / f"step{r['step']:06d}.pt").is_file():
             raise FileNotFoundError(f"model snapshot at {r['step']} is unavailable")
     a.out_dir.mkdir(parents=True, exist_ok=False)
     torch.set_num_threads(4)
@@ -67,7 +68,7 @@ def main():
     sites['all tokens'] = list(range(model.cfg.seq_len))
     cells = [dict(depth=d, site=name, positions=pos)
              for d in range(len(model.blocks)+1) for name, pos in sites.items()]
-    result = dict(source=str(a.run), config=c, model_config=source['model_config'],
+    result = dict(source=str(a.run), model_directory=str(model_dir), config=c, model_config=source['model_config'],
                   latents=source['latents'], frequency=source['frequency'],
                   cells=cells, reference=source['reference'],
                   selection='per latent and checkpoint, highest raw TRAINING calibration score; alpha 1',
@@ -83,7 +84,7 @@ def main():
     start = time.time()
     for old in rows:
         step = old['step']
-        model.load_state_dict(torch.load(a.run / 'models' / f'step{step:06d}.pt',
+        model.load_state_dict(torch.load(model_dir / f'step{step:06d}.pt',
                                         map_location='cpu', weights_only=True))
         means = all_depth_means(model, bank)
         vectors = (means[:, target_ix] - means[:, ref_ix:ref_ix+1]).float()
