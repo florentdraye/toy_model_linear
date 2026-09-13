@@ -114,10 +114,15 @@ def plot(paths, out, window=1):
         ax.set_title(f"Latent {ref['latents'][j]}  ·  p={freq[j]:.2%}", fontsize=10)
         ax.set_ylim(-.025, 1.025)
         ax.grid(axis='y', color='#e8ebef', linewidth=.6)
-        ax.set_xlabel('Training steps')
-    axs.flat[0].legend(fontsize=7, frameon=False, loc='upper left')
-    fig.savefig(out / 'per_latent.png')
-    fig.savefig(out / 'per_latent.pdf')
+        if j >= n - min(n, 4):
+            ax.set_xlabel('Training steps')
+        if j % min(n, 4) == 0:
+            ax.set_ylabel('Gain')
+    handles, labels = axs.flat[0].get_legend_handles_labels()
+    fig.legend(handles, labels, fontsize=9, frameon=False, loc='upper center',
+               bbox_to_anchor=(.5, 1.06), ncol=5)
+    fig.savefig(out / 'per_latent.png', bbox_inches='tight')
+    fig.savefig(out / 'per_latent.pdf', bbox_inches='tight')
     plt.close(fig)
     # Raw curves retain failures below zero, including large off-target responses.
     fig, axes = plt.subplots(1, 2, figsize=(11, 3.5), layout='constrained')
