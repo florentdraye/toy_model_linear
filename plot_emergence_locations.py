@@ -48,9 +48,10 @@ def plot(paths, out):
     cb = fig.colorbar(plt.cm.ScalarMappable(norm=norm, cmap=cmap), ax=axes, fraction=.018, pad=.02)
     cb.set_label('Latent training frequency')
     status = 'complete' if all(d.get('complete') for d in data) else 'partial scan'
+    seed_label = f"seed {ref['config']['seed']}" if len(data) == 1 else f'{len(data)} seeds'
     strengths = ref.get('alphas', [1.])
     strength_label = 'strength 1' if strengths == [1.] else f'training-selected strength from {strengths}'
-    fig.suptitle(f"Width {ref['model_config']['d_model']} · {len(freq)} latents · {len(data)} seeds · {status}\n"
+    fig.suptitle(f"Width {ref['model_config']['d_model']} · {len(freq)} latents · {seed_label} · {status}\n"
                  f'Full-support target − reference means · {strength_label} · fixed held-out examples', fontsize=12)
     fig.savefig(out / 'best_location_steering.png')
     fig.savefig(out / 'best_location_steering.pdf')

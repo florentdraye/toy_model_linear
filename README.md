@@ -35,6 +35,14 @@ Not tracked: `runs/`, `logs/`, `__pycache__/`, `.claude/`, and any `*.pt` / `*.p
 
 ### Focused latent-frequency / steering experiment
 
+The [completed capacity study](CAPACITY_STEERING_RESULTS.md) compares widths
+128/256/512 on **32 latents, three seeds, and the same fixed test pairs**.
+All 909 checkpoint location scans are complete. A width-512 run reaches
+**0.996** mean steering with blocks 1–2; the three-seed averages are
+**0.961 / 0.933 / 0.302** for the three widths. Open the
+[raw capacity comparison](runs/emergence_capacity_summary/capacity_best_location.png)
+and [near-perfect larger run](runs/emergence_large_locations_s46/figures/best_location_steering.png).
+
 The successful baseline uses **target-minus-reference means**, added at strength
 1 after block 1 at token positions 2–5 (zero-based). The expanded evaluation now
 tracks **32 latents across three seeds**. All 303 width-128 checkpoint replays
