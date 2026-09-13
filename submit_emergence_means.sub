@@ -1,0 +1,16 @@
+# Pure difference of means, last token only, same three trained models.
+universe = vanilla
+executable = /bin/bash
+arguments = run_emergence_means.sh /fast/fdraye/toy_model_linear/emergence_wide_$(run_tag) --baseline /fast/fdraye/toy_model_linear/emergence_refined_$(run_tag)/history.json --out-dir /fast/fdraye/toy_model_linear/emergence_means_last_$(run_tag)
+initialdir = /lustre/home/fdraye/projects/toy_model_linear
+request_gpus = 1
+request_cpus = 4
+request_memory = 24 GB
+requirements = (CUDACapability == 9.0) && (Machine =!= "i101.internal.cluster.is.localnet") && (Machine =!= "g155.internal.cluster.is.localnet") && (Machine =!= "i205.internal.cluster.is.localnet")
++IsDocker = False
+stream_output = True
+stream_error = True
+output = /fast/fdraye/toy_model_linear/logs/emergence_means_$(Cluster).$(Process).out
+error = /fast/fdraye/toy_model_linear/logs/emergence_means_$(Cluster).$(Process).err
+log = /fast/fdraye/toy_model_linear/logs/emergence_means_$(Cluster).$(Process).log
+queue run_tag in s46,s47,s48

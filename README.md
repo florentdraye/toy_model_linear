@@ -35,7 +35,46 @@ Not tracked: `runs/`, `logs/`, `__pycache__/`, `.claude/`, and any `*.pt` / `*.p
 
 ### Focused latent-frequency / steering experiment
 
-The recommended wider-edit experiment is `submit_emergence_robust.sub`: three
+The simple default is now **difference of means, last token only**:
+`--direction-method uniform-mean --site last`. The graph latent remains at layer
+3 and the edit remains after transformer block 1; these are different coordinates.
+At every checkpoint, take the entire distinct training-path support (800,000
+paths in the completed experiment). For each reachable graph-layer-3 latent,
+compute its mean last-token activation in FP32 with FP64 accumulation. For target
+`k`, use `v_k = mu_k - mean(mu_j for j != k)`. Every alternative latent gets equal
+weight, with uniform trajectories within each latent, independent of training
+frequencies and unequal path multiplicities. Both groups use all available paths;
+there is no need to discard negatives to equalize group sizes. Held-out paths
+never enter the means. The resulting 128-dimensional vector is added once, at
+strength 1, only to the last token. No optimizer, validation selection, strength
+sweep, reference-specific subtraction, or temporal fitting is involved.
+
+`remeasure_emergence_means.py` replays saved models without retraining. It retains
+the original matched held-out pairs (reference latent 24) and copies the original
+generalization scores exactly, while checking them against a fresh forward pass.
+This tests insertion of the target-versus-rest vector into the reference context;
+it does not assume that a categorical reference representation is thereby erased.
+Exact-patch and random-direction controls are recomputed at the last-token site.
+The older optimized histories and models are preserved.
+
+```bash
+# On the cluster, after the existing wide/refined runs are complete:
+condor_submit_bid 2000 submit_emergence_means.sub
+# After downloading the three new histories:
+python3 plot_emergence.py runs/emergence_means_last_s*/history.json \
+  --out-dir runs/emergence_means_last_summary --smooth-window 3
+python3 -m unittest discover -s tests -v
+```
+
+The replay saves `[8, 1, 128]` directions and `[100, 1, 128]` class means at all
+101 checkpoints per seed, plus exact support counts and estimation metadata.
+Fresh output directories are mandatory. No monotonicity or timing agreement is
+imposed on the result. Larger mean sets remove sampling noise but cannot guarantee
+that this particular intervention works.
+
+#### Previous optimized experiments (retained for reproduction)
+
+The previous wider-edit experiment is `submit_emergence_robust.sub`: three
 seeds, a 10× geometric frequency range, weight decay 0.1, and a matched uniform
 control. It overrides the script defaults described below. After those four jobs
 finish, `submit_emergence_refine.sub` improves the fitted vectors at every saved
@@ -68,7 +107,7 @@ choices identical. Both evaluation paths are held out. Direction fitting uses
 separate pairs whose two paths are in training. At every checkpoint,
 `v_k = mean(h_target - h_reference)` is the exact least-squares optimal constant
 additive translation of those matched activations. This is the `mean` control.
-The default `--direction-method optimized` initializes there and fits a single
+The legacy `--direction-method optimized` initializes there and fits a single
 constant vector through the frozen downstream network to the correct counterfactual
 endpoint, using the first 75% of calibration pairs. The remaining 25% select the
 best iterate per latent. Projected Adam constrains the norm to the RMS size of a
@@ -80,7 +119,7 @@ control measures representation-derived steering. Model weights are frozen; no
 final-test pairs or future checkpoints are used. Final test data are scored only
 after fitting and validation selection.
 
-Default `--site token` uses a single 128-dimensional vector at token index 2,
+Legacy `--site token` uses a single 128-dimensional vector at token index 2,
 where the prefix has just reached graph layer 3. These are separate coordinates:
 graph layer 3 is the middle latent; transformer block 1 is the intervention depth.
 A seed-42 pilot found that a constant edit at block 3 was ineffective despite

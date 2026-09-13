@@ -39,6 +39,8 @@ def plot(paths, out, window=1):
     if ref.get('metric') != 'target_brier_skill_v1':
         raise ValueError('expected target Brier skill history; older effect-only pilots cannot be pooled')
     for d in data[1:]:
+        if d.get('direction_estimator') != ref.get('direction_estimator'):
+            raise ValueError('cannot pool different direction estimators or mean supports')
         if d.get('refinement') != ref.get('refinement'):
             raise ValueError('cannot pool different refinement procedures')
         for key in ('metric', 'latents', 'frequency', 'positions', 'reference', 'graph_config', 'model_config'):
@@ -91,7 +93,9 @@ def plot(paths, out, window=1):
     cbar.set_label('Latent training frequency')
     c = ref['config']
     status = 'complete' if all(d.get('complete') for d in data) else 'partial run'
-    fig.suptitle(f"Graph layer {c['graph_layer']} · transformer block {c['steer_depth']} · "
+    method = ('Difference of means · last token · ' if c['direction_method'] == 'uniform-mean'
+              and c['site'] == 'last' else '')
+    fig.suptitle(method + f"Graph layer {c['graph_layer']} · transformer block {c['steer_depth']} · "
                  f"{len(data)} seed{'s' if len(data)>1 else ''} · {status}", fontsize=12)
     fig.savefig(out / 'steering_gain.png')
     fig.savefig(out / 'steering_gain.pdf')
@@ -109,6 +113,8 @@ def plot(paths, out, window=1):
                                          ('random_raw', 'Random direction', ':', '#cb826d'),
                                          ('gain_raw', 'Generalization', '-', '#26364a'),
                                          ('steer_raw', 'Steering', '-', colors[j])]:
+            if key == 'mean_raw' and c['direction_method'] == 'uniform-mean':
+                continue  # The headline IS the mean vector; don't plot it twice.
             y = np.clip(arrays[key], 0, 1).mean(0)[:, j]
             ax.plot(steps, smooth(y, window), style, color=color, lw=1.7, label=label)
         ax.set_title(f"Latent {ref['latents'][j]}  ·  p={freq[j]:.2%}", fontsize=10)
@@ -166,6 +172,8 @@ def plot(paths, out, window=1):
         plt.close(fig)
     (out / 'figure_notes.txt').write_text(
         f"Sources: {', '.join(str(p) for p in paths)}\n"
+        f"Direction method: {c['direction_method']}; token positions (0-based): {ref['positions']}.\n"
+        f"Mean estimator: {json.dumps(ref.get('direction_estimator'))}\n"
         f"Display smoothing: {window}-checkpoint centered moving average; raw dots retained.\n"
         "Fidelity = 1 - mean ||p - one_hot(counterfactual graph endpoint)||² / (1 - 1/num_classes).\n"
         "Zero: uniform prediction. One: perfect endpoint prediction. Same score for input change and hidden edit.\n"

@@ -2,7 +2,7 @@
 # This condition is kept separate from the single-token 30x experiment.
 universe = vanilla
 executable = /bin/bash
-arguments = run_emergence.sh --out-dir /fast/fdraye/toy_model_linear/emergence_wide_$(run_tag) --seed $(seed) --steps 10000 --site suffix --steer-depth 1 --frequency-ratio $(ratio) --weight-decay 0.1 --save-models
+arguments = run_emergence.sh --out-dir /fast/fdraye/toy_model_linear/emergence_wide_$(run_tag) --seed $(seed) --steps 10000 --site suffix --direction-method optimized --steer-depth 1 --frequency-ratio $(ratio) --weight-decay 0.1 --save-models
 initialdir = /lustre/home/fdraye/projects/toy_model_linear
 request_gpus = 1
 request_cpus = 4

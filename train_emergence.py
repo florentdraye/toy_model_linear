@@ -19,6 +19,7 @@ from src.data import enumerate_paths, split_indices, LatentFrequencySampler
 from src.graph import Graph
 from src.model import ToyTransformer
 from src.emergence import paired_bank, fit_directions, optimize_directions, measure
+from src.uniform_means import UniformMeanBank
 
 
 def parser():
@@ -32,7 +33,7 @@ def parser():
     p.add_argument('--eval-batch', type=int, default=2048)
     p.add_argument('--graph-layer', type=int, default=3)
     p.add_argument('--steer-depth', type=int, default=1, help='1-based post-block depth')
-    p.add_argument('--site', choices=['token', 'suffix', 'all'], default='token')
+    p.add_argument('--site', choices=['last', 'token', 'suffix', 'all'], default='last')
     p.add_argument('--frequency-ratio', type=float, default=30.)
     p.add_argument('--num-latents', type=int, default=8)
     p.add_argument('--graph-seed', type=int, default=0)
@@ -49,7 +50,7 @@ def parser():
     p.add_argument('--device', default='cuda')
     p.add_argument('--resume', action='store_true')
     p.add_argument('--save-models', action='store_true', help='retain model snapshots for offline checks')
-    p.add_argument('--direction-method', choices=['mean', 'optimized'], default='optimized')
+    p.add_argument('--direction-method', choices=['uniform-mean', 'mean', 'optimized'], default='uniform-mean')
     p.add_argument('--direction-steps', type=int, default=400)
     p.add_argument('--direction-lr', type=float, default=.03)
     return p
@@ -112,8 +113,11 @@ def main():
                 'test_support': test_idx}, a.out_dir / 'banks.pt')
     fit = {k: v.to(a.device) for k, v in fit.items()}
     test = {k: v.to(a.device) for k, v in test.items()}
-    positions = ([a.graph_layer - 1] if a.site == 'token' else
+    positions = ([a.n_layers - 2] if a.site == 'last' else
+                 [a.graph_layer - 1] if a.site == 'token' else
                  list(range(a.graph_layer - 1 if a.site == 'suffix' else 0, a.n_layers - 1)))
+    mean_bank = (UniformMeanBank(train_edges, train_nodes[:, a.graph_layer])
+                 if a.direction_method == 'uniform-mean' else None)
     mcfg = ModelConfig(vocab_size=a.edges, seq_len=a.n_layers - 1, n_classes=a.nodes,
                        d_model=a.d_model, n_heads=4, d_ff=4 * a.d_model,
                        n_blocks=a.n_blocks, mlp_activation='relu2')
@@ -132,6 +136,8 @@ def main():
               'frequency': sampler.probabilities[order[ranks].to(a.device)].tolist(),
               'classes': sampler.classes.tolist(), 'probabilities': sampler.probabilities.tolist(),
               'history': []}
+    if mean_bank is not None:
+        result['direction_estimator'] = {**mean_bank.description(targets), 'positions': positions}
     start = 0
     counts = torch.zeros(len(sampler.classes), device=a.device, dtype=torch.long)
     if a.resume:
@@ -158,7 +164,10 @@ def main():
         nonlocal running_loss, loss_n
         model.eval()
         with torch.autocast(device_type='cuda', dtype=torch.bfloat16, enabled=a.device.startswith('cuda')):
-            means = fit_directions(model, fit, a.steer_depth, positions, a.eval_batch)
+            if mean_bank is None:
+                means = fit_directions(model, fit, a.steer_depth, positions, a.eval_batch)
+            else:
+                means, _ = mean_bank.fit(model, targets, a.steer_depth, positions, a.eval_batch)
             direction_info = {}
             vectors = means
             if a.direction_method == 'optimized':
