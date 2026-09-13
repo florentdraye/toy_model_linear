@@ -82,6 +82,8 @@ def main():
     if a.resume:
         saved = torch.load(a.out_dir / 'resume.pt', map_location=a.device, weights_only=False)
         for k, v in config.items():
+            if k == 'steps' and v >= saved['result']['config'][k]:
+                continue
             if k not in ('resume', 'device', 'out_dir') and saved['result']['config'][k] != v:
                 raise ValueError(f'cannot resume with changed {k}')
     torch.set_num_threads(4)
@@ -142,6 +144,10 @@ def main():
         counts = saved['counts']
         result = saved['result']
         start = saved['step']
+        if a.steps != result['config']['steps']:
+            result.setdefault('horizon_extensions', []).append({'at_step': start, 'new_steps': a.steps})
+        result['config'] = config
+        result['complete'] = start == a.steps
     graph.save(a.out_dir / 'graph.pt')
     print(json.dumps({k: result[k] for k in ('host', 'gpu', 'latents', 'frequency', 'reference', 'positions')}), flush=True)
     t0 = time.time()

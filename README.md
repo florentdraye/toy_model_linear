@@ -108,7 +108,9 @@ The wrapper uses granularity's existing PyTorch venv. Results are written to
 `/fast/fdraye/toy_model_linear/emergence_s43` (and s44, s45, emergence_uniform): incremental `history.json`,
 resumable `resume.pt`, exact pair IDs in `banks.pt`, one fitted vector per latent
 per checkpoint in `directions/`, and PNG/PDF figures. Use `--resume` with the same
-configuration to continue an interrupted run. `--save-models` additionally retains
+configuration to continue an interrupted run. You may increase `--steps` on resume;
+the constant learning-rate schedule makes this a continuation of the same run,
+and the extended horizon is recorded. `--save-models` additionally retains
 model snapshots for offline measurements. Pair counts are capped equally across
 latents when a selected latent has fewer distinct pairs than requested; actual
 counts are recorded. The learning rate is constant after
