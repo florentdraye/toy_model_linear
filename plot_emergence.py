@@ -8,7 +8,7 @@ import numpy as np
 import matplotlib
 matplotlib.use('Agg')
 import matplotlib.pyplot as plt
-from matplotlib.colors import LogNorm
+from matplotlib.colors import LogNorm, LinearSegmentedColormap
 
 
 def crossing(steps, curve, threshold=.5):
@@ -65,7 +65,7 @@ def plot(paths, out, window=1):
                          'ytick.color': '#657083', 'savefig.dpi': 220})
     freq = np.array(ref['frequency'])
     norm = LogNorm(min(freq) * .999, max(freq) * 1.001)
-    cmap = plt.get_cmap('viridis_r')
+    cmap = LinearSegmentedColormap.from_list('frequency', plt.get_cmap('viridis_r')(np.linspace(.18, .98, 256)))
     colors = [cmap(norm(p)) for p in freq]
     fig, axes = plt.subplots(1, 2, figsize=(11.2, 4.1), sharex=True, sharey=True,
                              layout='constrained')
@@ -102,11 +102,11 @@ def plot(paths, out, window=1):
         if j >= n:
             ax.set_visible(False)
             continue
-        for key, label, style, color in [('gain_raw', 'Generalization', '-', '#26364a'),
-                                         ('steer_raw', 'Steering', '-', colors[j]),
-                                         ('patch_raw', 'Exact patch', '--', '#959aa4'),
+        for key, label, style, color in [('patch_raw', 'Exact patch', '--', '#959aa4'),
                                          ('mean_raw', 'Mean vector', '-.', '#8c76b7'),
-                                         ('random_raw', 'Random direction', ':', '#cb826d')]:
+                                         ('random_raw', 'Random direction', ':', '#cb826d'),
+                                         ('gain_raw', 'Generalization', '-', '#26364a'),
+                                         ('steer_raw', 'Steering', '-', colors[j])]:
             y = np.clip(arrays[key], 0, 1).mean(0)[:, j]
             ax.plot(steps, smooth(y, window), style, color=color, lw=1.7, label=label)
         ax.set_title(f"Latent {ref['latents'][j]}  ·  p={freq[j]:.2%}", fontsize=10)
@@ -141,6 +141,22 @@ def plot(paths, out, window=1):
         writer = csv.DictWriter(f, fieldnames=rows[0].keys())
         writer.writeheader()
         writer.writerows(rows)
+    observed = [r for r in rows if r['steer_minus_gain'] is not None]
+    if observed:
+        fig, ax = plt.subplots(figsize=(4.6, 4.3), layout='constrained')
+        for r in observed:
+            ax.scatter(r['t_gain_50'], r['t_steer_50'], color=cmap(norm(r['frequency'])),
+                       s=34, edgecolors='white', linewidths=.5)
+        lo = min(min(r['t_gain_50'], r['t_steer_50']) for r in observed) * .85
+        hi = max(max(r['t_gain_50'], r['t_steer_50']) for r in observed) * 1.15
+        ax.plot([lo, hi], [lo, hi], '--', color='#929aa8', lw=1, label='Same emergence time')
+        ax.set(xscale='log', yscale='log', xlim=(lo, hi), ylim=(lo, hi),
+               xlabel='Generalization: steps to 0.5', ylabel='Steering: steps to 0.5',
+               title=f'{len(observed)}/{len(rows)} latent × seed pairs cross both thresholds')
+        ax.legend(frameon=False, fontsize=8)
+        fig.savefig(out / 'emergence_times.png')
+        fig.savefig(out / 'emergence_times.pdf')
+        plt.close(fig)
     (out / 'figure_notes.txt').write_text(
         f"Sources: {', '.join(str(p) for p in paths)}\n"
         f"Display smoothing: {window}-checkpoint centered moving average; raw dots retained.\n"

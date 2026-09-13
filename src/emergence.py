@@ -134,7 +134,7 @@ def from_hidden(model, h, depth):
 
 
 def optimize_directions(model, bank, means, depth, positions, steps=150,
-                        lr=.03, batch_size=128):
+                        lr=.03, batch_size=128, radius_scale=1.):
     """Fit constant causal vectors with frozen weights and held-out validation.
 
     One vector per target, initialized at the mean shift and constrained to the
@@ -158,7 +158,7 @@ def optimize_directions(model, bank, means, depth, positions, steps=150,
             hs.append(torch.cat(hh))
             radii.append(torch.cat(norms).mean().sqrt())
         hidden = torch.stack(hs)
-        radius = torch.stack(radii).clamp_min(1e-8).view(k, 1, 1)
+        radius = radius_scale * torch.stack(radii).clamp_min(1e-8).view(k, 1, 1)
     n_train = max(1, int(n * .75))
     if n_train == n:
         raise ValueError('vector calibration needs a validation pair')
