@@ -1,0 +1,16 @@
+# Submit after all three wider-edit source runs have completed.
+universe = vanilla
+executable = /bin/bash
+arguments = run_refine_emergence.sh /fast/fdraye/toy_model_linear/emergence_wide_s$(seed) --out-dir /fast/fdraye/toy_model_linear/emergence_refined_s$(seed)
+initialdir = /lustre/home/fdraye/projects/toy_model_linear
+request_gpus = 1
+request_cpus = 4
+request_memory = 24 GB
+requirements = (CUDACapability == 9.0) && (Machine =!= "i101.internal.cluster.is.localnet") && (Machine =!= "g155.internal.cluster.is.localnet") && (Machine =!= "i205.internal.cluster.is.localnet")
++IsDocker = False
+stream_output = True
+stream_error = True
+output = /fast/fdraye/toy_model_linear/logs/emergence_$(Cluster).$(Process).out
+error = /fast/fdraye/toy_model_linear/logs/emergence_$(Cluster).$(Process).err
+log = /fast/fdraye/toy_model_linear/logs/emergence_$(Cluster).$(Process).log
+queue seed in 46,47,48

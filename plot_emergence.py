@@ -39,6 +39,8 @@ def plot(paths, out, window=1):
     if ref.get('metric') != 'target_brier_skill_v1':
         raise ValueError('expected target Brier skill history; older effect-only pilots cannot be pooled')
     for d in data[1:]:
+        if d.get('refinement') != ref.get('refinement'):
+            raise ValueError('cannot pool different refinement procedures')
         for key in ('metric', 'latents', 'frequency', 'positions', 'reference', 'graph_config', 'model_config'):
             if d[key] != ref[key]:
                 raise ValueError(f'cannot pool differing {key}')
