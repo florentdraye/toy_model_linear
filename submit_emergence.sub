@@ -1,0 +1,17 @@
+# mkdir -p /fast/fdraye/toy_model_linear/logs
+# condor_submit_bid 2000 submit_emergence.sub
+universe = vanilla
+executable = /bin/bash
+arguments = run_emergence.sh --out-dir /fast/fdraye/toy_model_linear/emergence_pilot --steps 4000 --eval-every 50
+initialdir = /lustre/home/fdraye/projects/toy_model_linear
+request_gpus = 1
+request_cpus = 4
+request_memory = 24 GB
+requirements = (CUDACapability == 9.0) && (Machine =!= "i101.internal.cluster.is.localnet") && (Machine =!= "g155.internal.cluster.is.localnet")
++IsDocker = False
+stream_output = True
+stream_error = True
+output = /fast/fdraye/toy_model_linear/logs/emergence_$(Cluster).$(Process).out
+error = /fast/fdraye/toy_model_linear/logs/emergence_$(Cluster).$(Process).err
+log = /fast/fdraye/toy_model_linear/logs/emergence_$(Cluster).$(Process).log
+queue

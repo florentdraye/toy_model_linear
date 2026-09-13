@@ -33,6 +33,73 @@ Not tracked: `runs/`, `logs/`, `__pycache__/`, `.claude/`, and any `*.pt` / `*.p
 
 ## Quickstart
 
+### Focused latent-frequency / steering experiment
+
+`train_emergence.py` reuses the DAG and transformer, with one selected graph
+layer (default 3), one fixed post-block intervention (default block 3 of 6),
+and paired steering/generalization curves. It does not run the old probe cube.
+
+Training draws a latent first from a shuffled geometric law (100× most-to-least
+frequent), then a uniform path from that latent's training support. This corrects
+for unequal numbers of paths reaching different graph nodes. The complete path
+support is split before sampling; duplicates within training are intentional.
+`--frequency-ratio 1` is the matched uniform-frequency control. Graph, frequency
+assignment, train/test split, and measurement banks use `--data-seed` /
+`--graph-seed`; changing `--seed` changes model initialization and training draws.
+
+For each of eight frequency-ranked latents, compare a trajectory through it to
+one through the same most-frequent reference latent, keeping all subsequent edge
+choices identical. Both evaluation paths are held out. Direction fitting uses
+separate pairs whose two paths are in training. At every checkpoint,
+`v_k = mean(h_target - h_reference)` is the exact least-squares optimal constant
+additive translation of those matched activations. It is **not** claimed to be
+globally optimal for the nonlinear downstream network. No target-output loss,
+test-set selection, strength tuning, or future checkpoints enter the vector fit.
+
+Default `--site suffix` edits the residual positions from the latent's token to
+the end, at one transformer depth. The vector is the flattened residual slice
+(four positions × 128 dimensions by default), reshaped on insertion. This lets
+the intervention reach parallel copies of the latent at later token positions.
+`--site token` gives a single d_model-dimensional vector at token layer−1;
+`--site all` includes every token. The site is fixed throughout each run.
+
+Both scores use `1 - Σ||Δp_model - Δonehot_graph||² / Σ||Δonehot_graph||²`,
+where Δ is either the actual input change (generalization) or the hidden edit
+(steering), relative to the same reference prediction. Thus no effect scores 0,
+an exact teacher effect scores 1, and mistakes can score below 0. Headline plots
+floor negative scores at 0; JSON and `raw_fidelity.png` retain them. Coincident
+teacher endpoints are retained to penalize off-target effects. An exact,
+context-dependent activation patch and a norm-matched random-vector control
+diagnose intervention-site limits and nonspecific effects. The frequent reference
+must itself be learned, so these are paired-effect gains, not isolated-node accuracies;
+the latter are saved separately.
+
+Submit on the cluster (never train on the login node or laptop):
+
+```bash
+mkdir -p /fast/fdraye/toy_model_linear/logs
+condor_submit_bid 2000 submit_emergence.sub
+```
+
+The wrapper uses granularity's existing PyTorch venv. Results are written to
+`/fast/fdraye/toy_model_linear/emergence_pilot`: incremental `history.json`,
+resumable `resume.pt`, exact pair IDs in `banks.pt`, one fitted vector per latent
+per checkpoint in `directions/`, and PNG/PDF figures. Use `--resume` with the same
+configuration to continue an interrupted run. The learning rate is constant after
+100 warmup steps. Existing result directories are protected against accidental reuse.
+
+```bash
+python3 -m unittest discover -s tests -p test_emergence.py -v
+python3 plot_emergence.py runs/emergence_seed*/history.json --out-dir runs/emergence_figures
+```
+
+Plots default to raw checkpoint means; `--smooth-window 3` optionally adds a
+documented centered moving average with raw dots retained. Multiple seeds are
+averaged within the same latent, with seed uncertainty bands. `timing.csv` uses
+unsmoothed raw scores, an absolute 0.5 threshold sustained for three checkpoints,
+and explicit censoring. A low ceiling is never rescaled into apparent emergence.
+Timing agreement is a hypothesis to test, not a constraint imposed on the plots.
+
 ```bash
 pip install -r requirements.txt   # torch>=2.0
 python train.py --out-dir runs/exp1

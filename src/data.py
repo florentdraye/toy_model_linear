@@ -61,3 +61,38 @@ def build_dataloaders(graph: Graph, train_cfg: TrainConfig):
         batch_size=train_cfg.batch_size, shuffle=False, drop_last=False,
     )
     return train_loader, test_loader, dataset, (train_idx, test_idx)
+
+
+class LatentFrequencySampler:
+    """Draw a latent first, then a uniform training path conditional on it.
+
+    Unlike weighting paths by p(latent), this divides out the number of paths
+    reaching each node. Thus the actual marginal is exactly the requested law.
+    Sampling is with replacement, from an already disjoint training support.
+    The frequency assignment is shuffled independently of graph node numbering.
+    """
+
+    def __init__(self, labels, ratio=100.0, seed=0):
+        if ratio < 1:
+            raise ValueError("frequency ratio must be >= 1")
+        self.classes, inverse, counts = labels.unique(
+            sorted=True, return_inverse=True, return_counts=True)
+        if len(self.classes) < 2:
+            raise ValueError("need at least two reachable latents")
+        rng = torch.Generator().manual_seed(seed)
+        order = torch.randperm(len(counts), generator=rng).to(labels.device)
+        ranked = torch.logspace(0, -torch.log10(torch.tensor(ratio)).item(),
+                                len(counts), device=labels.device)
+        self.probabilities = torch.empty_like(ranked)
+        self.probabilities[order] = ranked / ranked.sum()
+        self.order = order
+        self.counts = counts
+        self.offsets = counts.cumsum(0) - counts
+        self.indices = inverse.argsort(stable=True)
+
+    def sample(self, n, generator=None):
+        cls = torch.multinomial(self.probabilities, n, replacement=True,
+                                generator=generator)
+        within = (torch.rand(n, device=cls.device, generator=generator)
+                  * self.counts[cls]).long()
+        return self.indices[self.offsets[cls] + within], cls
