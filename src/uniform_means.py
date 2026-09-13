@@ -34,13 +34,14 @@ class UniformMeanBank:
         self.edges = edges[inverse.argsort(stable=True)]
 
     @torch.no_grad()
-    def fit(self, model, targets, depth, positions, batch_size=8192):
+    def fit(self, model, targets, depth, positions, batch_size=8192, reference=None):
         """Return v[k,p] = mu[k,p] - mean_{j != k} mu[j,p], plus all mu.
 
         Each position has its own vector. Class sizes need not be equal: every
         alternative CLASS receives equal weight, not every negative trajectory.
         FP32 forward passes and FP64 sums avoid low-precision accumulation.
         Model must be in eval mode; its weights and training flag are unchanged.
+        With reference=k, subtract that class mean instead of the mean of rest.
         """
         if model.training:
             raise ValueError('put the frozen model in eval mode before taking means')
@@ -50,6 +51,8 @@ class UniformMeanBank:
             raise ValueError('position outside the input sequence')
         if any(k not in self.classes for k in targets):
             raise ValueError('target has no paths in the mean bank')
+        if reference is not None and reference not in self.classes:
+            raise ValueError('reference has no paths in the mean bank')
         device = next(model.parameters()).device
         means, start = [], 0
         with torch.autocast(device_type=device.type, enabled=False):
@@ -64,12 +67,13 @@ class UniformMeanBank:
         means = torch.stack(means)
         ix = [self.classes.index(k) for k in targets]
         positive = means[ix]
-        negative = (means.sum(0) - positive) / (len(self.classes) - 1)
+        negative = ((means.sum(0) - positive) / (len(self.classes) - 1)
+                    if reference is None else means[self.classes.index(reference)])
         return (positive - negative).float(), means
 
-    def description(self, targets):
+    def description(self, targets, reference=None):
         counts = dict(zip(self.classes, self.counts))
-        return {'method': 'uniform_latent_difference_of_means_v1',
+        info = {'method': 'uniform_latent_difference_of_means_v1',
                 'positive': 'uniform over all training paths through target',
                 'negative': 'equal weight per other latent, uniform paths within latent',
                 'support': 'entire training split, no replacement or test paths',
@@ -78,3 +82,8 @@ class UniformMeanBank:
                 'total_paths': len(self.edges),
                 'positive_paths': [counts[k] for k in targets],
                 'negative_paths': [len(self.edges) - counts[k] for k in targets]}
+        if reference is not None:
+            info.update(method='uniform_target_reference_difference_of_means_v1',
+                        negative='uniform over all training paths through reference',
+                        reference=reference, negative_paths=[counts[reference]] * len(targets))
+        return info

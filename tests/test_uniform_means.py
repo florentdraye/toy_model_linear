@@ -62,6 +62,11 @@ class UniformMeanTest(unittest.TestCase):
         self.assertTrue(torch.allclose(v[0].double(), means[0]-(means[1]+means[2])/2, atol=1e-7))
         pooled = means[0]-(means[1]+3*means[2])/4
         self.assertGreater(float((v[0]-pooled).norm()), 1e-5)
+        translated, _ = bank.fit(model, [10], 1, [2], 2, reference=30)
+        torch.testing.assert_close(translated[0], (means[0]-means[2]).float())
+        self.assertEqual(bank.description([10], reference=30)['negative_paths'], [3])
+        with self.assertRaises(ValueError):
+            bank.fit(model, [10], 1, [2], reference=99)
 
     def test_only_last_token_is_edited_and_prefix_forward_matches(self):
         model = self.setup_model()

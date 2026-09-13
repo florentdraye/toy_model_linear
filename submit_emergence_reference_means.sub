@@ -1,0 +1,18 @@
+# Full checkpoint replay: analytic target-reference means, tokens 2-5, alpha 1.
+# This is explicitly a four-token comparison, not last-token steering.
+# condor_submit_bid 2000 submit_emergence_reference_means.sub
+universe = vanilla
+executable = /bin/bash
+arguments = run_emergence_means.sh /fast/fdraye/toy_model_linear/emergence_wide_$(run_tag) --baseline /fast/fdraye/toy_model_linear/emergence_refined_$(run_tag)/history.json --out-dir /fast/fdraye/toy_model_linear/emergence_reference_means_$(run_tag) --site suffix --contrast reference
+initialdir = /lustre/home/fdraye/projects/toy_model_linear
+request_gpus = 1
+request_cpus = 4
+request_memory = 24 GB
+requirements = (CUDACapability == 9.0) && (Machine =!= "i101.internal.cluster.is.localnet") && (Machine =!= "g155.internal.cluster.is.localnet") && (Machine =!= "i205.internal.cluster.is.localnet") && (Machine =!= "i207.internal.cluster.is.localnet")
++IsDocker = False
+stream_output = True
+stream_error = True
+output = /fast/fdraye/toy_model_linear/logs/emergence_reference_means_$(Cluster).$(Process).out
+error = /fast/fdraye/toy_model_linear/logs/emergence_reference_means_$(Cluster).$(Process).err
+log = /fast/fdraye/toy_model_linear/logs/emergence_reference_means_$(Cluster).$(Process).log
+queue run_tag in s46,s47,s48

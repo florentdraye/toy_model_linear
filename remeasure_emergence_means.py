@@ -1,4 +1,4 @@
-"""Replay saved models with last-token, full-support difference-of-means edits.
+"""Replay saved models with full-support difference-of-means edits.
 
 No retraining, optimization, validation selection, or steering-strength sweep.
 The original held-out pairs and generalization measurements are retained.
@@ -30,6 +30,8 @@ def main():
     p.add_argument('--baseline', type=Path, help='optional refined history to preserve generalization from')
     p.add_argument('--out-dir', type=Path, required=True)
     p.add_argument('--mean-batch', type=int, default=8192)
+    p.add_argument('--site', choices=['last', 'token', 'suffix', 'all'], default='last')
+    p.add_argument('--contrast', choices=['rest', 'reference'], default='rest')
     a = p.parse_args()
     if not torch.cuda.is_available():
         raise RuntimeError('submit this full-support replay to a GPU compute node')
@@ -73,7 +75,11 @@ def main():
             'on': paths['edge_seqs'][ix[..., 1]].cuda(),
             'y_off': paths['labels'][ix[..., 0]].cuda(),
             'y_on': paths['labels'][ix[..., 1]].cuda()}
-    positions = [source['model_config']['seq_len'] - 1]
+    length = source['model_config']['seq_len']
+    positions = ([length - 1] if a.site == 'last' else [c['graph_layer'] - 1]
+                 if a.site == 'token' else list(range(c['graph_layer'] - 1
+                                                    if a.site == 'suffix' else 0, length)))
+    reference = source['reference'] if a.contrast == 'reference' else None
     result = copy.deepcopy(source)
     for key in list(result):
         if key.startswith('refinement'):
@@ -82,11 +88,12 @@ def main():
                   parent_run=str(a.run.resolve()),
                   baseline_history=str(a.baseline.resolve()) if a.baseline else str(a.run / 'history.json'),
                   model_directory=str((a.run / 'models').resolve()),
-                  direction_estimator=means_bank.description(source['latents']),
+                  direction_estimator=means_bank.description(source['latents'], reference),
                   remeasurement_commit=subprocess.check_output(['git', 'rev-parse', 'HEAD'], text=True).strip(),
                   remeasurement_host=socket.gethostname(),
                   remeasurement_gpu=torch.cuda.get_device_name())
-    result['config'].update(site='last', direction_method='uniform-mean',
+    result['config'].update(site=a.site, direction_method=('uniform-mean' if reference is None
+                                                          else 'uniform-reference-mean'),
                             direction_steps=0, direction_lr=0., mean_batch=a.mean_batch)
     result['direction_estimator']['positions'] = positions
     shutil.copyfile(a.run / 'graph.pt', a.out_dir / 'graph.pt')
@@ -99,7 +106,7 @@ def main():
         step = old['step']
         model.load_state_dict(torch.load(a.run / 'models' / f'step{step:06d}.pt', weights_only=True))
         vectors, class_means = means_bank.fit(model, source['latents'], c['steer_depth'],
-                                              positions, a.mean_batch)
+                                              positions, a.mean_batch, reference=reference)
         with torch.autocast('cuda', dtype=torch.bfloat16):
             metrics = measure(model, test, vectors, c['steer_depth'], positions, c['eval_batch'])
         # The user's generalization curve is copied exactly, not refitted or

@@ -95,6 +95,8 @@ def plot(paths, out, window=1):
     status = 'complete' if all(d.get('complete') for d in data) else 'partial run'
     method = ('Difference of means · last token · ' if c['direction_method'] == 'uniform-mean'
               and c['site'] == 'last' else '')
+    if c['direction_method'] == 'uniform-reference-mean':
+        method = f"Target − reference means · tokens {ref['positions'][0]}–{ref['positions'][-1]} · "
     fig.suptitle(method + f"Graph layer {c['graph_layer']} · transformer block {c['steer_depth']} · "
                  f"{len(data)} seed{'s' if len(data)>1 else ''} · {status}", fontsize=12)
     fig.savefig(out / 'steering_gain.png')
