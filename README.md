@@ -35,69 +35,62 @@ Not tracked: `runs/`, `logs/`, `__pycache__/`, `.claude/`, and any `*.pt` / `*.p
 
 ### Focused latent-frequency / steering experiment
 
-The current [best-location replay](BEST_SITE_RESULTS.md) scans all **42 residual
-depth/token locations**, including embeddings, and shows the best single-token
-edit selected separately for each model, latent, and checkpoint. Selection uses
-training calibration pairs; curves use held-out pairs. Unit-strength results
-and a separate strength-selected control are both shown, with analytic mean
-vectors throughout. Open the [overview](runs/emergence_best_site_summary/best_site_steering.png)
-and [selected positions](runs/emergence_best_site_summary/selected_positions.png).
+The successful baseline uses **target-minus-reference means**, added at strength
+1 after block 1 at token positions 2–5 (zero-based). The expanded evaluation now
+tracks **32 latents across three seeds**. All 303 width-128 checkpoint replays
+are complete: final held-out steering averages **0.95998** across 96 latent/seed
+combinations. Open the [32-curve plot](runs/emergence_small32_means_summary/steering_gain.png).
 
-The [intervention audit and full checkpoint replay](MEAN_INTERVENTION_RESULTS.md)
-reproduce successful **analytic target-minus-reference means at tokens 2–5**,
-block 1, strength 1, without optimization. The independent FP32 final-checkpoint
-held-out Brier skill is 0.95873. This four-token comparison differs explicitly
-from the last-token-only condition below. Open the
-[new steering/generalization plot](runs/emergence_reference_means_summary/steering_gain.png)
-and [controlled comparison](runs/emergence_intervention_audit_summary/intervention_diagnosis.png).
+The larger-model recipe is `submit_emergence_large_means.sub`: width **512**
+(18,974,820 parameters), six blocks, 20,000 training steps, measurements every
+200 steps, and seeds 46–48. It preserves the graph, training split, frequency
+law, optimizer, reference latent, and analytic intervention of the successful
+baseline. Its 32 frequency ranks were declared before observing outcomes and
+include all eight original ranks. The saved width-128 models are remeasured
+on exactly the same expanded pair bank for the capacity comparison.
 
-The follow-up [six-depth scan](MEAN_DEPTH_RESULTS.md) is complete: final-checkpoint
-last-token mean steering fails at every block in all three seeds. Exact patches
-work only at block 6, where they reproduce the classifier's target input.
-There is no supported intervention depth for the current mean edit.
-
-The completed last-token mean replay is documented in
-[MEAN_STEERING_RESULTS.md](MEAN_STEERING_RESULTS.md), with the current
-[steering/generalization figure](runs/emergence_summary/steering_gain.png).
-Generalization is unchanged; this simple edit and the exact last-token patch
-both fail at block 1. The older optimized result is archived separately.
-
-The simple default is now **difference of means, last token only**:
-`--direction-method uniform-mean --site last`. The graph latent remains at layer
-3 and the edit remains after transformer block 1; these are different coordinates.
-At every checkpoint, take the entire distinct training-path support (800,000
-paths in the completed experiment). For each reachable graph-layer-3 latent,
-compute its mean last-token activation in FP32 with FP64 accumulation. For target
-`k`, use `v_k = mu_k - mean(mu_j for j != k)`. Every alternative latent gets equal
-weight, with uniform trajectories within each latent, independent of training
-frequencies and unequal path multiplicities. Both groups use all available paths;
-there is no need to discard negatives to equalize group sizes. Held-out paths
-never enter the means. The resulting 128-dimensional vector is added once, at
-strength 1, only to the last token. No optimizer, validation selection, strength
-sweep, reference-specific subtraction, or temporal fitting is involved.
-
-`remeasure_emergence_means.py` replays saved models without retraining. It retains
-the original matched held-out pairs (reference latent 24) and copies the original
-generalization scores exactly, while checking them against a fresh forward pass.
-This tests insertion of the target-versus-rest vector into the reference context;
-it does not assume that a categorical reference representation is thereby erased.
-Exact-patch and random-direction controls are recomputed at the last-token site.
-The older optimized histories and models are preserved.
+At each checkpoint, means use **all 800,000 distinct training paths**, with
+FP32 forwards and FP64 accumulation. Each edited position has its own vector
+`mu_target - mu_reference`; there is no vector optimizer or strength fitting.
+The **462 unique held-out pairs per latent** are fixed before training and
+reused at every checkpoint and across model seeds. Neither side of any test
+pair belongs to training support. Bank hashes, class support counts, vectors,
+class means, model snapshots, and raw scores are saved for verification.
 
 ```bash
-# On the cluster, after the existing wide/refined runs are complete:
-condor_submit_bid 2000 submit_emergence_means.sub
-# After downloading the three new histories:
-python3 plot_emergence.py runs/emergence_means_last_s*/history.json \
-  --out-dir runs/emergence_means_last_summary --smooth-window 3
-python3 -m unittest discover -s tests -v
+# On the cluster, after syncing the intended commit:
+condor_submit_bid 2000 submit_emergence_large_means.sub
+# Once the larger run has written its fixed banks and initial history:
+condor_submit_bid 2000 submit_emergence_small32_means.sub
+# Locally, after downloading the histories:
+python3 plot_emergence.py runs/emergence_large_means_s*/history.json \
+  --out-dir runs/emergence_large_means_summary --smooth-window 3
+python3 plot_emergence_capacity.py \
+  --small runs/emergence_small32_means_s*/history.json \
+  --large runs/emergence_large_means_s*/history.json \
+  --out-dir runs/emergence_capacity_summary
 ```
 
-The replay saves `[8, 1, 128]` directions and `[100, 1, 128]` class means at all
-101 checkpoints per seed, plus exact support counts and estimation metadata.
-Fresh output directories are mandatory. No monotonicity or timing agreement is
-imposed on the result. Larger mean sets remove sampling noise but cannot guarantee
-that this particular intervention works.
+`scan_emergence_locations.py` checks every embedding/block depth, every single
+token, the four-token suffix, and all tokens. It keeps reference means and
+strength 1, selects locations on fixed training calibration pairs, then
+scores the selected edit on the held-out bank. Explicit saved checkpoints can
+be inspected while training continues. The original block-1 curves remain
+available alongside any location-selected result.
+
+The earlier [eight-curve reference-mean replay](MEAN_INTERVENTION_RESULTS.md)
+also succeeded, averaging 0.95834 in the original evaluation convention.
+Its [plot](runs/emergence_reference_means_summary/steering_gain.png) is retained.
+The [single-token search](BEST_SITE_RESULTS.md), [last-token depth scan](MEAN_DEPTH_RESULTS.md),
+and [target-versus-rest last-token replay](MEAN_STEERING_RESULTS.md) tested
+other intervention conditions and are archived separately. Their failures do
+not negate the successful four-token reference-mean result.
+
+The script’s historical defaults remain `--direction-method uniform-mean
+--site last`; use the explicit successful recipe above. Output directories
+must be fresh unless resuming an existing training run with `--resume`.
+Plots include raw negative scores and controls alongside the bounded headline
+panels. No monotonicity, perfect outcome, or matching emergence time is imposed.
 
 #### Previous optimized experiments (retained for reproduction)
 

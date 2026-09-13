@@ -1,0 +1,18 @@
+# Intermediate width, 32 predeclared frequency-ranked curves, analytic means at strength 1.
+# Graph, split, frequency law, optimizer, and intervention follow the successful baseline.
+# condor_submit_bid 2000 submit_emergence_medium_means.sub
+universe = vanilla
+executable = /bin/bash
+arguments = run_emergence.sh --out-dir /fast/fdraye/toy_model_linear/emergence_medium_means_s$(seed) --seed $(seed) --d-model 256 --n-blocks 6 --steps 20000 --eval-every 200 --num-latents 32 --latent-ranks 1 4 6 8 11 13 15 18 20 22 25 29 32 36 39 43 46 50 53 57 60 64 67 71 74 78 81 85 88 92 95 99 --site suffix --direction-method uniform-reference-mean --steer-depth 1 --frequency-ratio 10 --weight-decay 0.1 --lr 0.001 --batch-size 2048 --mean-batch 8192 --save-models --save-class-means
+initialdir = /lustre/home/fdraye/projects/toy_model_linear
+request_gpus = 1
+request_cpus = 4
+request_memory = 32 GB
+requirements = (CUDACapability == 9.0) && (Machine =!= "i101.internal.cluster.is.localnet") && (Machine =!= "g155.internal.cluster.is.localnet") && (Machine =!= "i205.internal.cluster.is.localnet") && (Machine =!= "i207.internal.cluster.is.localnet")
++IsDocker = False
+stream_output = True
+stream_error = True
+output = /fast/fdraye/toy_model_linear/logs/emergence_medium_means_$(Cluster).$(Process).out
+error = /fast/fdraye/toy_model_linear/logs/emergence_medium_means_$(Cluster).$(Process).err
+log = /fast/fdraye/toy_model_linear/logs/emergence_medium_means_$(Cluster).$(Process).log
+queue seed in 46,47,48
