@@ -34,12 +34,17 @@ def main():
     p.add_argument('run', type=Path)
     p.add_argument('--out-dir', type=Path, required=True)
     p.add_argument('--steps', type=int, nargs='+')
+    p.add_argument('--step-range', type=int, nargs=2, metavar=('FIRST', 'LAST'),
+                   help='inclusive saved-checkpoint range; EMA still consumes the entire earlier prefix')
     p.add_argument('--weight-ema-decay', type=float, default=0.,
                    help='causal EMA of every saved model snapshot; recompute means and all scores')
     p.add_argument('--alphas', type=float, nargs='+', default=[1.],
                    help='optional explicit strength grid, selected on training pairs only')
     a = p.parse_args()
     average = CheckpointAverage(a.weight_ema_decay)
+    if a.step_range is not None:
+        if a.steps is not None or a.step_range[0] > a.step_range[1]:
+            raise ValueError('use either steps or an increasing step-range')
     if 1. not in a.alphas or any(x <= 0 for x in a.alphas) or len(set(a.alphas)) != len(a.alphas):
         raise ValueError('strength grid must be distinct and positive, and include 1')
     a.alphas.sort()
@@ -47,9 +52,11 @@ def main():
         raise RuntimeError('submit this scan to a GPU compute node')
     source = json.loads((a.run / 'history.json').read_text())
     model_dir = Path(source.get('model_directory', a.run / 'models'))
-    if not source.get('complete') and a.steps is None:
+    if not source.get('complete') and a.steps is None and a.step_range is None:
         raise ValueError('unfinished training requires explicit saved steps')
     rows = [r for r in source['history'] if a.steps is None or r['step'] in a.steps]
+    if a.step_range is not None:
+        rows = [r for r in rows if a.step_range[0] <= r['step'] <= a.step_range[1]]
     rows.sort(key=lambda r: r['step'])
     if not rows or (a.steps is not None and set(a.steps) != {r['step'] for r in rows}):
         raise ValueError('requested checkpoints unavailable')
