@@ -32,7 +32,12 @@ def main():
     p.add_argument('run', type=Path)
     p.add_argument('--out-dir', type=Path, required=True)
     p.add_argument('--steps', type=int, nargs='+')
+    p.add_argument('--alphas', type=float, nargs='+', default=[1.],
+                   help='optional explicit strength grid, selected on training pairs only')
     a = p.parse_args()
+    if 1. not in a.alphas or any(x <= 0 for x in a.alphas) or len(set(a.alphas)) != len(a.alphas):
+        raise ValueError('strength grid must be distinct and positive, and include 1')
+    a.alphas.sort()
     if not torch.cuda.is_available():
         raise RuntimeError('submit this scan to a GPU compute node')
     source = json.loads((a.run / 'history.json').read_text())
@@ -66,12 +71,16 @@ def main():
     sites = {f'token {j}': [j] for j in range(model.cfg.seq_len)}
     sites['suffix'] = list(range(c['graph_layer'] - 1, model.cfg.seq_len))
     sites['all tokens'] = list(range(model.cfg.seq_len))
-    cells = [dict(depth=d, site=name, positions=pos)
-             for d in range(len(model.blocks)+1) for name, pos in sites.items()]
+    cells = [dict(depth=d, site=name, positions=pos, alpha=alpha)
+             for d in range(len(model.blocks)+1) for name, pos in sites.items() for alpha in a.alphas]
+    if a.alphas == [1.]:
+        cells = [{k: v for k, v in cell.items() if k != 'alpha'} for cell in cells]
     result = dict(source=str(a.run), model_directory=str(model_dir), config=c, model_config=source['model_config'],
                   latents=source['latents'], frequency=source['frequency'],
                   cells=cells, reference=source['reference'],
-                  selection='per latent and checkpoint, highest raw TRAINING calibration score; alpha 1',
+                  selection=('per latent and checkpoint, highest raw TRAINING calibration score'
+                             + ('; alpha 1' if a.alphas == [1.] else '; explicit strength grid')),
+                  alphas=a.alphas,
                   calibration='fixed final quarter of fit pairs; overlaps training mean support',
                   evaluation='fixed held-out pairs; excluded from means and location selection',
                   evaluation_bank_sha256=hashlib.sha256(test_ids.numpy().tobytes()).hexdigest(),
@@ -92,8 +101,9 @@ def main():
         for depth in range(len(model.blocks)+1):
             hidden = capture(model, paths, pairs[..., 0], depth)
             for positions in sites.values():
-                scores.append(score_edit(model, hidden, None, labels, depth,
-                                         positions, vectors[depth])['skill'])
+                for alpha in a.alphas:
+                    scores.append(score_edit(model, hidden, None, labels, depth,
+                                             positions, vectors[depth], alpha)['skill'])
         scores = torch.tensor(scores, dtype=torch.float64)
         if not torch.isfinite(scores).all():
             raise ValueError('nonfinite calibration score')
@@ -105,7 +115,7 @@ def main():
         selected_vectors = []
         for j, cell in enumerate(choices):
             depth, pos = cell['depth'], cell['positions']
-            v = vectors[depth, j:j+1, pos]
+            v = cell.get('alpha', 1.) * vectors[depth, j:j+1, pos]
             selected_vectors.append(v.cpu())
             with torch.autocast('cuda', dtype=torch.bfloat16):
                 m = measure(model, {k: x[j:j+1] for k, x in test.items()}, v, depth, pos, c['eval_batch'])

@@ -1,0 +1,17 @@
+# Diagnose location on an explicitly saved larger-model checkpoint while training continues.
+# condor_submit_bid 2000 submit_emergence_large_strength_pilot.sub
+universe = vanilla
+executable = /bin/bash
+arguments = run_emergence_locations.sh /fast/fdraye/toy_model_linear/emergence_large_means_s48 --out-dir /fast/fdraye/toy_model_linear/emergence_large_strength_s48_step5400 --steps 5400 --alphas 0.5 1 2 4 8
+initialdir = /lustre/home/fdraye/projects/toy_model_linear
+request_gpus = 1
+request_cpus = 4
+request_memory = 32 GB
+requirements = (CUDACapability == 9.0) && (Machine =!= "i101.internal.cluster.is.localnet") && (Machine =!= "g155.internal.cluster.is.localnet") && (Machine =!= "i205.internal.cluster.is.localnet") && (Machine =!= "i207.internal.cluster.is.localnet")
++IsDocker = False
+stream_output = True
+stream_error = True
+output = /fast/fdraye/toy_model_linear/logs/emergence_large_strength_$(Cluster).$(Process).out
+error = /fast/fdraye/toy_model_linear/logs/emergence_large_strength_$(Cluster).$(Process).err
+log = /fast/fdraye/toy_model_linear/logs/emergence_large_strength_$(Cluster).$(Process).log
+queue 1

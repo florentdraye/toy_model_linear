@@ -48,8 +48,10 @@ def plot(paths, out):
     cb = fig.colorbar(plt.cm.ScalarMappable(norm=norm, cmap=cmap), ax=axes, fraction=.018, pad=.02)
     cb.set_label('Latent training frequency')
     status = 'complete' if all(d.get('complete') for d in data) else 'partial scan'
+    strengths = ref.get('alphas', [1.])
+    strength_label = 'strength 1' if strengths == [1.] else f'training-selected strength from {strengths}'
     fig.suptitle(f"Width {ref['model_config']['d_model']} · {len(freq)} latents · {len(data)} seeds · {status}\n"
-                 'Full-support target − reference means · strength 1 · fixed held-out examples', fontsize=12)
+                 f'Full-support target − reference means · {strength_label} · fixed held-out examples', fontsize=12)
     fig.savefig(out / 'best_location_steering.png')
     fig.savefig(out / 'best_location_steering.pdf')
     plt.close(fig)
@@ -97,6 +99,7 @@ def plot(paths, out):
         f"Sources: {paths}\nEvaluation-bank SHA256: {ref['evaluation_bank_sha256']}\n"
         "Location argmax uses only training calibration pairs; held-out examples never select locations.\n"
         "All cells: 7 depths (embedding plus 6 blocks), 6 individual tokens, suffix, all tokens.\n"
+        f"Strength grid: {strengths}; any strength selection uses training calibration only.\n"
         "Bounded panel floors each seed before averaging; 3-checkpoint display smoothing with raw dots.\n"
         "Raw scores are unsmoothed and retain negatives; bands +/-1.96 SE across model seeds.\n")
     print(f'Location figures: {out}')
