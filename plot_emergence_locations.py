@@ -12,7 +12,9 @@ from matplotlib.colors import LogNorm, LinearSegmentedColormap, BoundaryNorm
 from plot_emergence import smooth
 
 
-def plot(paths, out):
+def plot(paths, out, smooth_window=3):
+    if smooth_window < 1 or smooth_window % 2 == 0:
+        raise ValueError('smooth-window must be a positive odd number')
     data = [json.loads(Path(p).read_text()) for p in paths]
     ref = data[0]
     for d in data[1:]:
@@ -43,7 +45,7 @@ def plot(paths, out):
         mean = np.clip(arrays[key], 0, 1).mean(0)
         for j, color in enumerate(colors):
             ax.plot(steps, mean[:, j], '.', ms=2, color=color, alpha=.25)
-            ax.plot(steps, smooth(mean[:, j], 3), color=color, lw=1.5)
+            ax.plot(steps, smooth(mean[:, j], smooth_window), color=color, lw=1.5)
         ax.set(title=title, xlabel='Training steps', ylim=(-.025, 1.025))
         ax.grid(axis='y', color='#e8ebef', lw=.6)
     axes[0].set_ylabel('Target fidelity (Brier skill, floored at 0)')
@@ -106,7 +108,8 @@ def plot(paths, out):
         "Location argmax uses only training calibration pairs; held-out examples never select locations.\n"
         "All cells: 7 depths (embedding plus 6 blocks), 6 individual tokens, suffix, all tokens.\n"
         f"Strength grid: {strengths}; any strength selection uses training calibration only.\n"
-        "Bounded panel floors each seed before averaging; 3-checkpoint display smoothing with raw dots.\n"
+        f"Bounded panel floors each seed before averaging; {smooth_window}-checkpoint display window with raw dots "
+        "(window 1 means no curve smoothing).\n"
         "Raw scores are unsmoothed and retain negatives; bands +/-1.96 SE across model seeds.\n")
     print(f'Location figures: {out}')
 
@@ -115,5 +118,7 @@ if __name__ == '__main__':
     p = argparse.ArgumentParser(description=__doc__)
     p.add_argument('histories', nargs='+', type=Path)
     p.add_argument('--out-dir', type=Path, required=True)
+    p.add_argument('--smooth-window', type=int, default=3,
+                   help='positive odd display window; 1 retains raw checkpoint values')
     a = p.parse_args()
-    plot(a.histories, a.out_dir)
+    plot(a.histories, a.out_dir, a.smooth_window)

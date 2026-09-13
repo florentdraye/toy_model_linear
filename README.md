@@ -35,6 +35,13 @@ Not tracked: `runs/`, `logs/`, `__pycache__/`, `.claude/`, and any `*.pt` / `*.p
 
 ### Focused latent-frequency / steering experiment
 
+The [steering stability follow-up](STEERING_STABILITY_RESULTS.md) addresses the
+noisy width-512, seed-46 curves. Recomputing difference-of-means directions on
+causally averaged model weights removes the late dips. The
+[raw before/after comparison](runs/emergence_weight_ema_summary/weight_ema_comparison.png)
+shows all 32 curves with no score smoothing. Longer averaging delays emergence;
+it does not guarantee successful steering in other model seeds.
+
 The [completed capacity study](CAPACITY_STEERING_RESULTS.md) compares widths
 128/256/512 on **32 latents, three seeds, and the same fixed test pairs**.
 All 909 checkpoint location scans are complete. A width-512 run reaches
