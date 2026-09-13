@@ -8,7 +8,7 @@ from src.emergence import forward_at
 from src.graph import Graph
 from src.model import ToyTransformer
 from src.uniform_means import UniformMeanBank, hidden_at
-from train_emergence import parser
+from train_emergence import parser, selected_ranks
 from scan_emergence_depths import calibration_ids
 from audit_emergence_interventions import score_edit
 from src.emergence import measure
@@ -98,6 +98,21 @@ class UniformMeanTest(unittest.TestCase):
         model.train()
         with self.assertRaises(ValueError):
             bank.fit(model, [0], 1, [2])
+
+    def test_expanded_curve_selection_and_reference_training_mode(self):
+        old = selected_ranks(100, 8)
+        explicit = [1, 4, 6, 8, 11, 13, 15, 18, 20, 22, 25, 29, 32, 36, 39, 43,
+                    46, 50, 53, 57, 60, 64, 67, 71, 74, 78, 81, 85, 88, 92, 95, 99]
+        expanded = selected_ranks(100, 32, explicit)
+        self.assertTrue(set(old.tolist()).issubset(expanded.tolist()))
+        self.assertEqual(len(expanded), 32)
+        for invalid in ([0, 2], [1, 1], [1, 100]):
+            with self.assertRaises(ValueError):
+                selected_ranks(100, 2, invalid)
+        args = parser().parse_args(['--out-dir', 'unused', '--direction-method',
+                                   'uniform-reference-mean', '--save-class-means', '--mean-batch', '8192'])
+        self.assertEqual(args.direction_method, 'uniform-reference-mean')
+        self.assertEqual(args.mean_batch, 8192)
 
     def test_final_block_patch_reproduces_target_logits(self):
         model = self.setup_model()

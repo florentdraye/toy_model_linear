@@ -4,6 +4,7 @@ Example: python train_emergence.py --out-dir runs/emergence --steps 6000
 """
 import argparse
 from dataclasses import asdict
+import hashlib
 import json
 import math
 from pathlib import Path
@@ -36,6 +37,7 @@ def parser():
     p.add_argument('--site', choices=['last', 'token', 'suffix', 'all'], default='last')
     p.add_argument('--frequency-ratio', type=float, default=30.)
     p.add_argument('--num-latents', type=int, default=8)
+    p.add_argument('--latent-ranks', type=int, nargs='+', help='explicit nonreference frequency ranks to track')
     p.add_argument('--graph-seed', type=int, default=0)
     p.add_argument('--data-seed', type=int, default=314)
     p.add_argument('--seed', type=int, default=42)
@@ -50,7 +52,9 @@ def parser():
     p.add_argument('--device', default='cuda')
     p.add_argument('--resume', action='store_true')
     p.add_argument('--save-models', action='store_true', help='retain model snapshots for offline checks')
-    p.add_argument('--direction-method', choices=['uniform-mean', 'mean', 'optimized'], default='uniform-mean')
+    p.add_argument('--save-class-means', action='store_true', help='retain full-support class means at checkpoints')
+    p.add_argument('--mean-batch', type=int, help='FP32 mean-estimation batch; defaults to eval-batch')
+    p.add_argument('--direction-method', choices=['uniform-mean', 'uniform-reference-mean', 'mean', 'optimized'], default='uniform-mean')
     p.add_argument('--direction-steps', type=int, default=400)
     p.add_argument('--direction-lr', type=float, default=.03)
     return p
@@ -62,8 +66,19 @@ def atomic_json(path, data):
     tmp.replace(path)
 
 
+def selected_ranks(n_classes, count, explicit=None):
+    if explicit is None:
+        return torch.linspace(1, n_classes-1, count).round().long().unique()
+    if len(explicit) != count or len(set(explicit)) != count:
+        raise ValueError('latent-ranks must contain num-latents distinct ranks')
+    if min(explicit) < 1 or max(explicit) >= n_classes:
+        raise ValueError('latent ranks must exclude reference rank 0 and name reachable classes')
+    return torch.tensor(sorted(explicit), dtype=torch.long)
+
+
 def main():
-    a = parser().parse_args()
+    p = parser()
+    a = p.parse_args()
     if not (1 <= a.graph_layer < a.n_layers - 1):
         raise ValueError('graph-layer must be intermediate')
     if not 1 <= a.steer_depth <= a.n_blocks:
@@ -74,6 +89,10 @@ def main():
         raise ValueError('counts must be positive; pair counts must be >= 2')
     if a.edges ** (a.n_layers - 1) > 5_000_000:
         raise ValueError('enumerated support exceeds 5M paths; reduce graph size')
+    if a.mean_batch is not None and a.mean_batch < 1:
+        raise ValueError('mean-batch must be positive')
+    if a.save_class_means and a.direction_method not in ('uniform-mean', 'uniform-reference-mean'):
+        raise ValueError('saving class means requires a full-support mean estimator')
     if a.device == 'cpu' and a.steps > 2:
         raise ValueError('CPU is for smoke checks only (at most two steps); submit GPU work')
     if (a.out_dir / 'history.json').exists() and not a.resume:
@@ -85,7 +104,7 @@ def main():
         for k, v in config.items():
             if k == 'steps' and v >= saved['result']['config'][k]:
                 continue
-            if k not in ('resume', 'device', 'out_dir') and saved['result']['config'][k] != v:
+            if k not in ('resume', 'device', 'out_dir') and saved['result']['config'].get(k, p.get_default(k)) != v:
                 raise ValueError(f'cannot resume with changed {k}')
     torch.set_num_threads(4)
     torch.manual_seed(a.seed)
@@ -102,13 +121,17 @@ def main():
     sampler = LatentFrequencySampler(train_nodes[:, a.graph_layer], a.frequency_ratio, a.data_seed)
     # Selection depends on frequency rank only, never on measured curves.
     order = sampler.order.cpu()
-    ranks = torch.linspace(1, len(order) - 1, a.num_latents).round().long().unique()
+    ranks = selected_ranks(len(order), a.num_latents, a.latent_ranks)
     reference = int(sampler.classes[order[0]])
     targets = sampler.classes[order[ranks].to(a.device)].tolist()
     fit = paired_bank(paths, allowed, a.graph_layer, targets, reference,
                       a.fit_pairs, a.data_seed + 1, a.edges)
     test = paired_bank(paths, ~allowed, a.graph_layer, targets, reference,
                        a.eval_pairs, a.data_seed + 2, a.edges)
+    if allowed[test['ids']].any() or not allowed[fit['ids']].all():
+        raise ValueError('measurement pairs violate the training/test split')
+    evaluation_hash = hashlib.sha256(test['ids'].numpy().tobytes()).hexdigest()
+    training_hash = hashlib.sha256(train_idx.numpy().tobytes()).hexdigest()
     torch.save({'fit': fit['ids'], 'test': test['ids'], 'train': train_idx,
                 'test_support': test_idx}, a.out_dir / 'banks.pt')
     fit = {k: v.to(a.device) for k, v in fit.items()}
@@ -117,7 +140,8 @@ def main():
                  [a.graph_layer - 1] if a.site == 'token' else
                  list(range(a.graph_layer - 1 if a.site == 'suffix' else 0, a.n_layers - 1)))
     mean_bank = (UniformMeanBank(train_edges, train_nodes[:, a.graph_layer])
-                 if a.direction_method == 'uniform-mean' else None)
+                 if a.direction_method in ('uniform-mean', 'uniform-reference-mean') else None)
+    mean_reference = reference if a.direction_method == 'uniform-reference-mean' else None
     mcfg = ModelConfig(vocab_size=a.edges, seq_len=a.n_layers - 1, n_classes=a.nodes,
                        d_model=a.d_model, n_heads=4, d_ff=4 * a.d_model,
                        n_blocks=a.n_blocks, mlp_activation='relu2')
@@ -135,9 +159,11 @@ def main():
               'fit_pairs_actual': fit['off'].shape[1], 'eval_pairs_actual': test['off'].shape[1],
               'frequency': sampler.probabilities[order[ranks].to(a.device)].tolist(),
               'classes': sampler.classes.tolist(), 'probabilities': sampler.probabilities.tolist(),
+              'evaluation_bank_sha256': evaluation_hash, 'training_support_sha256': training_hash,
+              'tracked_frequency_ranks': ranks.tolist(), 'num_parameters': model.num_params(),
               'history': []}
     if mean_bank is not None:
-        result['direction_estimator'] = {**mean_bank.description(targets), 'positions': positions}
+        result['direction_estimator'] = {**mean_bank.description(targets, mean_reference), 'positions': positions}
     start = 0
     counts = torch.zeros(len(sampler.classes), device=a.device, dtype=torch.long)
     if a.resume:
@@ -163,11 +189,13 @@ def main():
     def checkpoint(step):
         nonlocal running_loss, loss_n
         model.eval()
+        class_means = None
         with torch.autocast(device_type='cuda', dtype=torch.bfloat16, enabled=a.device.startswith('cuda')):
             if mean_bank is None:
                 means = fit_directions(model, fit, a.steer_depth, positions, a.eval_batch)
             else:
-                means, _ = mean_bank.fit(model, targets, a.steer_depth, positions, a.eval_batch)
+                means, class_means = mean_bank.fit(model, targets, a.steer_depth, positions,
+                                                   a.mean_batch or a.eval_batch, reference=mean_reference)
             direction_info = {}
             vectors = means
             if a.direction_method == 'optimized':
@@ -182,6 +210,9 @@ def main():
         atomic_json(a.out_dir / 'history.json', result)
         (a.out_dir / 'directions').mkdir(exist_ok=True)
         torch.save(vectors.cpu(), a.out_dir / 'directions' / f'step{step:06d}.pt')
+        if a.save_class_means:
+            (a.out_dir / 'class_means').mkdir(exist_ok=True)
+            torch.save(class_means.cpu(), a.out_dir / 'class_means' / f'step{step:06d}.pt')
         if a.save_models:
             (a.out_dir / 'models').mkdir(exist_ok=True)
             torch.save({k: v.detach().cpu() for k, v in model.state_dict().items()},
