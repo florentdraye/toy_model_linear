@@ -31,7 +31,7 @@ def smooth(values, window):
                        np.ones(window) / window, mode='valid')
 
 
-def plot(paths, out, window=1):
+def plot(paths, out, window=1, latents=None):
     if window < 1 or window % 2 != 1:
         raise ValueError('smoothing window must be a positive odd number')
     data = [json.loads(Path(p).read_text()) for p in paths]
@@ -39,6 +39,8 @@ def plot(paths, out, window=1):
     if ref.get('metric') != 'target_brier_skill_v1':
         raise ValueError('expected target Brier skill history; older effect-only pilots cannot be pooled')
     for d in data[1:]:
+        if d.get('evaluation_bank_sha256') != ref.get('evaluation_bank_sha256'):
+            raise ValueError('cannot pool different fixed evaluation banks')
         if d.get('direction_estimator') != ref.get('direction_estimator'):
             raise ValueError('cannot pool different direction estimators or mean supports')
         if d.get('refinement') != ref.get('refinement'):
@@ -60,6 +62,12 @@ def plot(paths, out, window=1):
     for key in ('gain_raw', 'steer_raw', 'patch_raw', 'random_raw', 'mean_raw', 'accuracy'):
         arrays[key] = np.array([[{h['step']: h for h in d['history']}[t][key]
                                  for t in shared] for d in data])
+    if latents is not None:
+        if not latents or len(set(latents)) != len(latents):
+            raise ValueError('plot latents must be a nonempty distinct list')
+        ix = [ref['latents'].index(k) for k in latents]
+        arrays = {k: v[:, :, ix] for k, v in arrays.items()}
+        ref = {**ref, 'latents': list(latents), 'frequency': [ref['frequency'][j] for j in ix]}
     out = Path(out)
     out.mkdir(parents=True, exist_ok=True)
     plt.rcParams.update({'font.family': 'DejaVu Sans', 'font.size': 10,
@@ -97,8 +105,8 @@ def plot(paths, out, window=1):
               and c['site'] == 'last' else '')
     if c['direction_method'] == 'uniform-reference-mean':
         method = f"Target − reference means · tokens {ref['positions'][0]}–{ref['positions'][-1]} · "
-    fig.suptitle(method + f"Graph layer {c['graph_layer']} · transformer block {c['steer_depth']} · "
-                 f"{len(data)} seed{'s' if len(data)>1 else ''} · {status}", fontsize=12)
+    fig.suptitle(method + f"block {c['steer_depth']} · width {ref['model_config']['d_model']}\n"
+                 f"{len(freq)} latents · {len(data)} seed{'s' if len(data)>1 else ''} · {status}", fontsize=12)
     fig.savefig(out / 'steering_gain.png')
     fig.savefig(out / 'steering_gain.pdf')
     plt.close(fig)
@@ -115,7 +123,7 @@ def plot(paths, out, window=1):
                                          ('random_raw', 'Random direction', ':', '#cb826d'),
                                          ('gain_raw', 'Generalization', '-', '#26364a'),
                                          ('steer_raw', 'Steering', '-', colors[j])]:
-            if key == 'mean_raw' and c['direction_method'] == 'uniform-mean':
+            if key == 'mean_raw' and c['direction_method'] in ('uniform-mean', 'uniform-reference-mean'):
                 continue  # The headline IS the mean vector; don't plot it twice.
             y = np.clip(arrays[key], 0, 1).mean(0)[:, j]
             ax.plot(steps, smooth(y, window), style, color=color, lw=1.7, label=label)
@@ -174,6 +182,7 @@ def plot(paths, out, window=1):
         plt.close(fig)
     (out / 'figure_notes.txt').write_text(
         f"Sources: {', '.join(str(p) for p in paths)}\n"
+        f"Displayed latents: {ref['latents']}; fixed-bank SHA256: {ref.get('evaluation_bank_sha256')}.\n"
         f"Direction method: {c['direction_method']}; token positions (0-based): {ref['positions']}.\n"
         f"Mean estimator: {json.dumps(ref.get('direction_estimator'))}\n"
         f"Display smoothing: {window}-checkpoint centered moving average; raw dots retained.\n"
@@ -193,5 +202,6 @@ if __name__ == '__main__':
     p.add_argument('histories', nargs='+', type=Path)
     p.add_argument('--out-dir', required=True, type=Path)
     p.add_argument('--smooth-window', type=int, default=1)
+    p.add_argument('--latents', type=int, nargs='+', help='display this declared subset, preserving input order')
     a = p.parse_args()
-    plot(a.histories, a.out_dir, a.smooth_window)
+    plot(a.histories, a.out_dir, a.smooth_window, a.latents)
