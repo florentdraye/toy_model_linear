@@ -1,0 +1,17 @@
+# Scan every depth/token; select on training calibration and report held-out.
+# condor_submit_bid 2000 submit_emergence_best_site.sub
+universe = vanilla
+executable = /bin/bash
+arguments = run_emergence_best_site.sh /fast/fdraye/toy_model_linear/emergence_wide_$(run_tag) --out-dir /fast/fdraye/toy_model_linear/emergence_best_site_$(run_tag)
+initialdir = /lustre/home/fdraye/projects/toy_model_linear
+request_gpus = 1
+request_cpus = 4
+request_memory = 24 GB
+requirements = (CUDACapability == 9.0) && (Machine =!= "i101.internal.cluster.is.localnet") && (Machine =!= "g155.internal.cluster.is.localnet") && (Machine =!= "i205.internal.cluster.is.localnet") && (Machine =!= "i207.internal.cluster.is.localnet")
++IsDocker = False
+stream_output = True
+stream_error = True
+output = /fast/fdraye/toy_model_linear/logs/emergence_best_site_$(Cluster).$(Process).out
+error = /fast/fdraye/toy_model_linear/logs/emergence_best_site_$(Cluster).$(Process).err
+log = /fast/fdraye/toy_model_linear/logs/emergence_best_site_$(Cluster).$(Process).log
+queue run_tag in s46,s47,s48
