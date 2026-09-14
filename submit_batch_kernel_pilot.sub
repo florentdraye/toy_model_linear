@@ -1,0 +1,16 @@
+# Frozen-model kernel response at three latent-specific learning stages.
+universe = vanilla
+executable = /bin/bash
+arguments = run_batch_kernel.sh --training-run /fast/fdraye/toy_model_linear/emergence_large_means_s46 --model-run /fast/fdraye/toy_model_linear/emergence_weight_ema_0.95_s46 --out-dir /fast/fdraye/toy_model_linear/kernel_batch_counts_ema095_s46/latent_$(latent) --latent $(latent)
+initialdir = /lustre/home/fdraye/projects/toy_model_linear
+request_gpus = 1
+request_cpus = 4
+request_memory = 32 GB
+requirements = (CUDACapability == 9.0) && (Machine =!= "i101.internal.cluster.is.localnet") && (Machine =!= "g155.internal.cluster.is.localnet") && (Machine =!= "i205.internal.cluster.is.localnet") && (Machine =!= "i207.internal.cluster.is.localnet")
++IsDocker = False
+stream_output = True
+stream_error = True
+output = /fast/fdraye/toy_model_linear/logs/kernel_batch_counts_$(Cluster).$(Process).out
+error = /fast/fdraye/toy_model_linear/logs/kernel_batch_counts_$(Cluster).$(Process).err
+log = /fast/fdraye/toy_model_linear/logs/kernel_batch_counts_$(Cluster).$(Process).log
+queue latent in 53,44
