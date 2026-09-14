@@ -35,6 +35,13 @@ Not tracked: `runs/`, `logs/`, `__pycache__/`, `.claude/`, and any `*.pt` / `*.p
 
 ### Focused latent-frequency / steering experiment
 
+The [kernel batch-count experiment](KERNEL_BATCH_COUNTS_RESULTS.md) tests how
+changing training examples affects a fixed reference while preserving exact
+latent counts. All 32 latents have before/midpoint/after scatter plots, using
+16,384 examples per batch and 64 batches per count. Open the
+[logit-response atlas](runs/kernel_batch_counts_ema095_s46/figures/all_latents_logit.pdf)
+or [loss-response atlas](runs/kernel_batch_counts_ema095_s46/figures/all_latents_loss.pdf).
+
 The [steering stability follow-up](STEERING_STABILITY_RESULTS.md) addresses the
 noisy width-512, seed-46 curves. Recomputing difference-of-means directions on
 causally averaged model weights removes the late dips. The

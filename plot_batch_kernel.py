@@ -51,7 +51,7 @@ def main():
                 ylabel=(r'$[\sum_j K_{ij}g_j]_{y_i}$' if projection==0 else r'$g_i^T\sum_j K_{ij}g_j$')
                 axes[0].set_ylabel(ylabel)
                 fig.suptitle(f"Latent {h['latent']} · frequency {h['frequency']:.4f} · reference path {h['reference_id']}\n"
-                    f"EMA 0.95 · batch {h['batch_size']:,} · {h['repeats']} batches/count · all latent counts fixed within each column of points",fontsize=11)
+                    f"EMA 0.95 · batch {h['batch_size']:,} · {h['repeats']} batches/count · orange: conditional pool mean",fontsize=11)
                 fig.savefig(out/f"latent_{h['latent']}_{slug}.png",dpi=180)
                 pdf.savefig(fig);plt.close(fig)
                 for stage,s in enumerate(h['stages']):
@@ -78,7 +78,7 @@ def main():
             for stage,ax in enumerate(axes[row]):panel(ax,h,data,stage,projection)
             axes[row,0].set_ylabel(f"Latent {h['latent']}\n"+(r'$[\sum K g]_{y_i}$' if projection==0 else r'$g_i^T\sum K g$'))
         fig.suptitle(f"{len(chosen)} frequency-spaced latents · EMA 0.95 · raw {slug} response sums\n"
-                     'Same reference across stages; 16,384 examples/batch; 64 batches at each exact count',fontsize=12)
+                     'Same reference across stages; 16,384 examples/batch; 64 batches/count; orange: conditional pool mean',fontsize=12)
         fig.savefig(out/f'overview_{slug}.png',dpi=170);plt.close(fig)
     for filename,rows in [('summary.csv',summaries),('scatter_points.csv',points)]:
         with (out/filename).open('w',newline='') as f:
