@@ -42,6 +42,13 @@ def main():
     assert len(np.unique(steps)) == len(steps)
     arrays = {key: np.array([r[key] for r in rows]) for key in ['steer_raw', 'steering_accuracy', 'gain_raw', 'accuracy',
               'patch_raw', 'random_raw', 'original_dom_steer', 'matched_mean_at_lat_site', 'full_dom_at_lat_site']}
+    audit = None
+    if (a.run / 'audit.json').exists():
+        audit = json.loads((a.run / 'audit.json').read_text())
+        if not audit['complete']: raise ValueError('LAT replay audit unfinished')
+        assert [r['step'] for r in audit['rows']] == steps.tolist()
+        for key in ['unit_steer_raw', 'unit_steering_accuracy']:
+            arrays[key] = np.array([r[key] for r in audit['rows']])
     assert all(np.isfinite(value).all() for value in arrays.values())
     out = a.run / 'figures'; out.mkdir(exist_ok=True)
     with (out / 'steering_curves.csv').open('w', newline='') as f:
@@ -52,13 +59,14 @@ def main():
                 c = row['choices'][k]
                 writer.writerow([row['step'], latent, *[arrays[key][t, k] for key in arrays], c['depth'], ' '.join(map(str, c['positions'])), c['alpha']])
     freq = np.array(ref['frequency']); norm = LogNorm(freq.min(), freq.max()); cmap = plt.get_cmap('viridis')
-    fig, axes = plt.subplots(1, 3, figsize=(15, 4.8), sharex=True, sharey=True, layout='constrained')
-    for ax, key, title in zip(axes, ['original_dom_steer', 'steer_raw', 'gain_raw'],
-                              ['Previous DoM steering', 'LAT steering', 'Generalization']):
+    panels = [('original_dom_steer', 'Previous DoM steering'), ('steer_raw', 'LAT: calibrated strength'), ('gain_raw', 'Generalization')]
+    if audit: panels.insert(1, ('unit_steer_raw', 'LAT: strength 1'))
+    fig, axes = plt.subplots(1, len(panels), figsize=(5 * len(panels), 4.8), sharex=True, sharey=True, layout='constrained')
+    for ax, (key, title) in zip(axes, panels):
         for k in range(len(freq)):
             ax.plot(steps, arrays[key][:, k], color=cmap(norm(freq[k])), lw=1.2, alpha=.85)
         ax.set_title(title); ax.set_xlabel('Training step'); ax.grid(alpha=.2)
-    minimum = min(float(arrays[key].min()) for key in ['original_dom_steer', 'steer_raw', 'gain_raw'])
+    minimum = min(float(arrays[key].min()) for key, _ in panels)
     axes[0].set_ylim(min(-.025, minimum - .025), 1.025)
     axes[0].set_ylabel('Held-out Brier gain (raw, unclipped)')
     fig.colorbar(plt.cm.ScalarMappable(norm=norm, cmap=cmap), ax=axes, label='Latent training probability', shrink=.8)
@@ -125,6 +133,11 @@ def main():
                    max_exact_eigen_check_error=max(c['exact_check_error'] for r in rows for c in r['eigen_checks']),
                    max_generalization_replay_error=max(r['generalization_replay_max_difference'] for r in rows),
                    hosts=sorted(set(r['host'] for r in rows)), gpus=sorted(set(r['gpu'] for r in rows)))
+    if audit:
+        summary.update(final_unit_strength_gain=float(arrays['unit_steer_raw'][-1].mean()),
+                       final_unit_strength_accuracy=float(arrays['unit_steering_accuracy'][-1].mean()),
+                       max_hook_replay_error=max(r['hook_replay_max_error'] for r in audit['rows']),
+                       split_bank_checks=audit['split_bank_checks'])
     (a.run / 'summary.json').write_text(json.dumps(summary, indent=2) + '\n')
     print(json.dumps(summary, indent=2))
 

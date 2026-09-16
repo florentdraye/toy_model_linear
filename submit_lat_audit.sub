@@ -1,0 +1,16 @@
+universe = vanilla
+executable = /lustre/home/fdraye/projects/granularity/.venv/bin/python
+arguments = -u audit_lat_replay.py --source /fast/fdraye/toy_model_linear/emergence_large_means_s46 --run /fast/fdraye/toy_model_linear/emergence_lat_s46
+initialdir = /lustre/home/fdraye/projects/toy_model_linear
+request_gpus = 1
+request_cpus = 4
+request_memory = 32 GB
+environment = "OMP_NUM_THREADS=4 OPENBLAS_NUM_THREADS=4"
+requirements = (CUDACapability == 9.0) && (Machine =!= "i101.internal.cluster.is.localnet") && (Machine =!= "g155.internal.cluster.is.localnet") && (Machine =!= "i205.internal.cluster.is.localnet") && (Machine =!= "i207.internal.cluster.is.localnet") && (Machine =!= "i106.internal.cluster.is.localnet")
++IsDocker = False
+stream_output = True
+stream_error = True
+output = /fast/fdraye/toy_model_linear/logs/lat_audit_$(Cluster).$(Process).out
+error = /fast/fdraye/toy_model_linear/logs/lat_audit_$(Cluster).$(Process).err
+log = /fast/fdraye/toy_model_linear/logs/lat_audit_$(Cluster).$(Process).log
+queue 1
