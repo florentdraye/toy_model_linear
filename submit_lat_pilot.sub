@@ -1,0 +1,16 @@
+# Frozen original width-512 seed-46 models; bid 2000.
+universe = vanilla
+executable = /bin/bash
+arguments = run_lat.sh --source /fast/fdraye/toy_model_linear/emergence_large_means_s46 --means-run /fast/fdraye/toy_model_linear/emergence_large_locations_s46 --bank /fast/fdraye/toy_model_linear/emergence_lat_s46/contrast_bank.pt --out-dir /fast/fdraye/toy_model_linear/emergence_lat_s46/step$(step) --step $(step)
+initialdir = /lustre/home/fdraye/projects/toy_model_linear
+request_gpus = 1
+request_cpus = 4
+request_memory = 48 GB
+requirements = (CUDACapability == 9.0) && (Machine =!= "i101.internal.cluster.is.localnet") && (Machine =!= "g155.internal.cluster.is.localnet") && (Machine =!= "i205.internal.cluster.is.localnet") && (Machine =!= "i207.internal.cluster.is.localnet") && (Machine =!= "i106.internal.cluster.is.localnet")
++IsDocker = False
+stream_output = True
+stream_error = True
+output = /fast/fdraye/toy_model_linear/logs/lat_$(Cluster).$(Process).out
+error = /fast/fdraye/toy_model_linear/logs/lat_$(Cluster).$(Process).err
+log = /fast/fdraye/toy_model_linear/logs/lat_$(Cluster).$(Process).log
+queue step in 8000,20000
