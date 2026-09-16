@@ -1,0 +1,16 @@
+# Original width-512 seed-46 checkpoints, fixed held-out examples; bid 2000.
+universe = vanilla
+executable = /bin/bash
+arguments = run_representation_norm.sh --run /fast/fdraye/toy_model_linear/emergence_large_means_s46 --out-dir /fast/fdraye/toy_model_linear/representation_norm_raw_s46
+initialdir = /lustre/home/fdraye/projects/toy_model_linear
+request_gpus = 1
+request_cpus = 4
+request_memory = 32 GB
+requirements = (CUDACapability == 9.0) && (Machine =!= "i101.internal.cluster.is.localnet") && (Machine =!= "g155.internal.cluster.is.localnet") && (Machine =!= "i205.internal.cluster.is.localnet") && (Machine =!= "i207.internal.cluster.is.localnet")
++IsDocker = False
+stream_output = True
+stream_error = True
+output = /fast/fdraye/toy_model_linear/logs/representation_norm_$(Cluster).$(Process).out
+error = /fast/fdraye/toy_model_linear/logs/representation_norm_$(Cluster).$(Process).err
+log = /fast/fdraye/toy_model_linear/logs/representation_norm_$(Cluster).$(Process).log
+queue 1
