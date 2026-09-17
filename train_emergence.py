@@ -52,6 +52,8 @@ def parser():
     p.add_argument('--device', default='cuda')
     p.add_argument('--resume', action='store_true')
     p.add_argument('--save-models', action='store_true', help='retain model snapshots for offline checks')
+    p.add_argument('--model-save-every', type=int, default=0, help='0 saves every evaluation; final always saved')
+    p.add_argument('--best-locations', action='store_true', help='training-calibrated DoM location scan, FP32 evaluation')
     p.add_argument('--save-class-means', action='store_true', help='retain full-support class means at checkpoints')
     p.add_argument('--mean-batch', type=int, help='FP32 mean-estimation batch; defaults to eval-batch')
     p.add_argument('--direction-method', choices=['uniform-mean', 'uniform-reference-mean', 'mean', 'optimized'], default='uniform-mean')
@@ -79,6 +81,10 @@ def selected_ranks(n_classes, count, explicit=None):
 def main():
     p = parser()
     a = p.parse_args()
+    if a.model_save_every < 0:
+        raise ValueError('model-save-every must be nonnegative')
+    if a.best_locations and a.direction_method != 'uniform-reference-mean':
+        raise ValueError('best-locations requires uniform-reference-mean')
     if not (1 <= a.graph_layer < a.n_layers - 1):
         raise ValueError('graph-layer must be intermediate')
     if not 1 <= a.steer_depth <= a.n_blocks:
@@ -144,6 +150,10 @@ def main():
     mean_bank = (UniformMeanBank(train_edges, train_nodes[:, a.graph_layer])
                  if a.direction_method in ('uniform-mean', 'uniform-reference-mean') else None)
     mean_reference = reference if a.direction_method == 'uniform-reference-mean' else None
+    if a.best_locations:
+        # Unused classes contribute to neither target nor reference means.
+        keep = torch.isin(train_nodes[:, a.graph_layer], torch.tensor(targets + [reference], device=a.device))
+        mean_bank = UniformMeanBank(train_edges[keep], train_nodes[keep, a.graph_layer])
     mcfg = ModelConfig(vocab_size=a.edges, seq_len=a.n_layers - 1, n_classes=a.nodes,
                        d_model=a.d_model, n_heads=4, d_ff=4 * a.d_model,
                        n_blocks=a.n_blocks, mlp_activation='relu2')
@@ -166,6 +176,12 @@ def main():
               'history': []}
     if mean_bank is not None:
         result['direction_estimator'] = {**mean_bank.description(targets, mean_reference), 'positions': positions}
+    if a.best_locations:
+        result['selection'] = 'per checkpoint and latent: best of embedding + all blocks, single tokens/suffix/all; alpha 1'
+        result['evaluation_dtype'] = 'float32; no EMA or score smoothing'
+        result['direction_estimator']['positions'] = 'all tokens at every depth'
+        result['calibration'] = 'last quarter of fixed training pairs; never held-out pairs'
+        result['direction_estimator']['support'] = 'entire training support of all target and reference classes'
     start = 0
     counts = torch.zeros(len(sampler.classes), device=a.device, dtype=torch.long)
     if a.resume:
@@ -197,18 +213,26 @@ def main():
         nonlocal running_loss, loss_n
         model.eval()
         class_means = None
-        with torch.autocast(device_type='cuda', dtype=torch.bfloat16, enabled=a.device.startswith('cuda')):
-            if mean_bank is None:
-                means = fit_directions(model, fit, a.steer_depth, positions, a.eval_batch)
-            else:
-                means, class_means = mean_bank.fit(model, targets, a.steer_depth, positions,
-                                                   a.mean_batch or a.eval_batch, reference=mean_reference)
-            direction_info = {}
-            vectors = means
-            if a.direction_method == 'optimized':
-                vectors, direction_info = optimize_directions(model, fit, means, a.steer_depth,
-                                                              positions, a.direction_steps, a.direction_lr)
-            metrics = measure(model, test, vectors, a.steer_depth, positions, a.eval_batch, means)
+        direction_info = {}
+        if a.best_locations:
+            from src.dom_locations import measure_locations
+            calibration = {k: v[:, max(1, int(v.shape[1]*.75)):] for k, v in fit.items()}
+            metrics, vectors, class_means = measure_locations(
+                model, mean_bank, targets, reference, calibration, test, a.graph_layer,
+                a.mean_batch or a.eval_batch, a.eval_batch)
+        else:
+            with torch.autocast(device_type='cuda', dtype=torch.bfloat16, enabled=a.device.startswith('cuda')):
+                if mean_bank is None:
+                    means = fit_directions(model, fit, a.steer_depth, positions, a.eval_batch)
+                else:
+                    means, class_means = mean_bank.fit(model, targets, a.steer_depth, positions,
+                                                       a.mean_batch or a.eval_batch, reference=mean_reference)
+                direction_info = {}
+                vectors = means
+                if a.direction_method == 'optimized':
+                    vectors, direction_info = optimize_directions(model, fit, means, a.steer_depth,
+                                                                  positions, a.direction_steps, a.direction_lr)
+                metrics = measure(model, test, vectors, a.steer_depth, positions, a.eval_batch, means)
         rec = {'step': step, 'examples_seen': step * a.batch_size,
                'latent_counts': counts[order[ranks].to(a.device)].tolist(),
                'train_loss': float(running_loss / max(loss_n, 1)), **metrics, **direction_info}
@@ -220,7 +244,7 @@ def main():
         if a.save_class_means:
             (a.out_dir / 'class_means').mkdir(exist_ok=True)
             torch.save(class_means.cpu(), a.out_dir / 'class_means' / f'step{step:06d}.pt')
-        if a.save_models:
+        if a.save_models and (not a.model_save_every or step % a.model_save_every == 0 or step == a.steps):
             (a.out_dir / 'models').mkdir(exist_ok=True)
             torch.save({k: v.detach().cpu() for k, v in model.state_dict().items()},
                        a.out_dir / 'models' / f'step{step:06d}.pt')
@@ -262,8 +286,9 @@ def main():
         loss_n += 1
         if step % a.eval_every == 0 or step == a.steps:
             checkpoint(step)
-    from plot_emergence import plot
-    plot([a.out_dir / 'history.json'], a.out_dir / 'figures')
+    if not a.best_locations:
+        from plot_emergence import plot
+        plot([a.out_dir / 'history.json'], a.out_dir / 'figures')
 
 
 if __name__ == '__main__':
