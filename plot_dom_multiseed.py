@@ -97,15 +97,19 @@ def plot(paths, out, allow_partial=False):
     axes[2].set_ylabel('Brier gain difference')
     fig.suptitle(title+'\nRaw averages; pointwise intervals resample whole model seeds', fontsize=11)
     fig.tight_layout(rect=(0, 0, 1, .88)); save(fig, 'seed_summary')
-    fig, axes = plt.subplots(2, 5, figsize=(18, 7), sharex=True, sharey=True)
-    for i, ax in enumerate(axes.flat):
-        if i >= n: ax.set_visible(False); continue
-        for key, label, color in series:
-            ax.plot(steps, data[key][i].mean(1), label=label, color=color, lw=1)
-        decorate(ax); ax.set_title(f'Seed {seeds[i]}')
-    axes.flat[0].legend(fontsize=6)
-    fig.suptitle(title+'\nEach panel averages the same 32 latents', fontsize=11)
-    fig.tight_layout(rect=(0, 0, 1, .92)); save(fig, 'individual_seeds')
+    with PdfPages(out/'individual_seeds.pdf') as pdf:
+        for start in range(0, n, 10):
+            fig, axes = plt.subplots(2, 5, figsize=(18, 7), sharex=True, sharey=True)
+            for i, ax in enumerate(axes.flat, start=start):
+                if i >= min(start+10, n): ax.set_visible(False); continue
+                for key, label, color in series:
+                    ax.plot(steps, data[key][i].mean(1), label=label, color=color, lw=1)
+                decorate(ax); ax.set_title(f'Seed {seeds[i]}')
+            axes.flat[0].legend(fontsize=6)
+            fig.suptitle(title+f'\nSeeds {start+1}–{min(start+10,n)}; each panel averages 32 latents', fontsize=11)
+            fig.tight_layout(rect=(0, 0, 1, .92)); pdf.savefig(fig)
+            if start == 0: fig.savefig(out/'individual_seeds.png', dpi=170, bbox_inches='tight')
+            plt.close(fig)
     with PdfPages(out/'all_latents.pdf') as pdf:
         for start in range(0, len(latents), 8):
             fig, axes = plt.subplots(2, 4, figsize=(16, 7), sharex=True, sharey=True)

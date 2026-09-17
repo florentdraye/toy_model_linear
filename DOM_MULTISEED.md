@@ -1,7 +1,9 @@
 # Width-512 DoM replication with dense measurements
 
-Protocol fixed before the new runs: model seeds **46–55**, including all three
-previous seeds; 20,000 training steps; measurements every **100** steps (201
+Protocol fixed before the first new runs: model seeds **46–55**, including all three
+previous seeds. After the provisional ten-seed latent curves remained visibly
+noisy, the replication was extended prospectively to seeds **56–95**, for 50
+model seeds overall. Every run uses 20,000 training steps and measurements every **100** steps (201
 checkpoints). No seed selection, weight EMA, curve smoothing, clipping,
 time alignment, or normalization by each curve's final value.
 
@@ -38,7 +40,8 @@ steps, and a resumable optimizer/sampler checkpoint. Re-run with `--resume`
 to recover an interrupted seed. Local raw histories and plots are collected
 under `runs/dom_multiseed_summary/`.
 
-Submitted as **17571550.0–9**. The first runs started on g198/g205 with NVIDIA
+Submitted as **17571550.0–9**, followed by the noise-reduction extension
+**seeds 56–95**. The first runs started on g198/g205 with NVIDIA
 H100 GPUs. Fetch results and generate plots with `python3 collect_dom_multiseed.py`.
 The collector waits for measurements from all ten seeds, then plots only their
 common checkpoints. Incomplete trajectories are prominently provisional.

@@ -1,0 +1,17 @@
+# Additional predeclared seeds for a 50-seed estimate (46–95 overall).
+# condor_submit_bid 2000 submit_dom_multiseed_more.sub
+universe = vanilla
+executable = /bin/bash
+arguments = run_dom_multiseed.sh $(seed)
+initialdir = /lustre/home/fdraye/projects/toy_model_linear
+request_gpus = 1
+request_cpus = 4
+request_memory = 32 GB
+requirements = (CUDACapability == 9.0) && (Machine =!= "i101.internal.cluster.is.localnet") && (Machine =!= "g155.internal.cluster.is.localnet") && (Machine =!= "i205.internal.cluster.is.localnet") && (Machine =!= "i207.internal.cluster.is.localnet") && (Machine =!= "i106.internal.cluster.is.localnet")
++IsDocker = False
+stream_output = True
+stream_error = True
+output = /fast/fdraye/toy_model_linear/logs/dom_multiseed_more_$(Cluster).$(Process).out
+error = /fast/fdraye/toy_model_linear/logs/dom_multiseed_more_$(Cluster).$(Process).err
+log = /fast/fdraye/toy_model_linear/logs/dom_multiseed_more_$(Cluster).$(Process).log
+queue seed in 56,57,58,59,60,61,62,63,64,65,66,67,68,69,70,71,72,73,74,75,76,77,78,79,80,81,82,83,84,85,86,87,88,89,90,91,92,93,94,95
