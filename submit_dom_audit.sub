@@ -1,0 +1,16 @@
+# Submit after all runs reach 20000; for initial audit use -append 'audit_steps = 0'.
+audit_steps = 0 8000 20000
+audit_name = final
+universe = vanilla
+executable = /bin/bash
+arguments = run_dom_audit.sh --steps $(audit_steps) --out /fast/fdraye/toy_model_linear/dom_multiseed_audit_$(audit_name).json
+initialdir = /lustre/home/fdraye/projects/toy_model_linear
+request_gpus = 1
+request_cpus = 4
+request_memory = 24 GB
+requirements = (CUDACapability == 9.0) && (Machine =!= "i101.internal.cluster.is.localnet") && (Machine =!= "g155.internal.cluster.is.localnet") && (Machine =!= "i205.internal.cluster.is.localnet") && (Machine =!= "i207.internal.cluster.is.localnet") && (Machine =!= "i106.internal.cluster.is.localnet")
++IsDocker = False
+output = /fast/fdraye/toy_model_linear/logs/dom_multiseed_audit_$(Cluster).out
+error = /fast/fdraye/toy_model_linear/logs/dom_multiseed_audit_$(Cluster).err
+log = /fast/fdraye/toy_model_linear/logs/dom_multiseed_audit_$(Cluster).log
+queue 1
