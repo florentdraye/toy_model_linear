@@ -35,6 +35,12 @@ Not tracked: `runs/`, `logs/`, `__pycache__/`, `.claude/`, and any `*.pt` / `*.p
 
 ### Focused latent-frequency / steering experiment
 
+The [optimized 16-latent replication](OPTIMIZED16_RESULTS.md) reproduces the
+successful supervised steering setup after removing its two highest-frequency
+curves and filling the retained range with 16 latents. Ten model seeds give
+smooth checkpoint-wise latent averages; final optimized steering averages
+0.9983. Open the [raw unsmoothed curves](runs/emergence_optimized16_summary/figures/raw_fidelity.png).
+
 The [dense ten-seed DoM replication](DOM_MULTISEED.md) uses the original
 width-512 model, seeds 46–55, 32 latents, and measurements every 100 steps.
 Run `python3 collect_dom_multiseed.py` to fetch raw cluster histories and
