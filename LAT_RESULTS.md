@@ -2,17 +2,19 @@
 
 ## Status
 
-Implemented and submitted a 21-checkpoint replay of the **original**, unaveraged
+Completed and audited a 21-checkpoint replay of the **original**, unaveraged
 width-512 seed-46 model, at steps 0, 1000, ..., 20000. All 100 graph-layer-3
 latent classes get LAT axes; the existing 32 targets retain their fixed 462
 held-out intervention pairs. No training or model execution runs on the Mac.
 
-Two pilot checkpoints, 8000 and 20000, are complete and downloaded. The remaining
-19 jobs were submitted as Condor cluster **17567599**; five were still pending
-or running at the last successful queue check. The Mac then lost DNS resolution
-for `login.cluster.is.localnet`. Both configured DNS servers return NXDOMAIN.
-The full trajectory is **not yet verified or collected**. An additional replay
-audit and unit-strength evaluation are implemented but not yet submitted.
+All 21 checkpoints are complete and downloaded, along with an independent
+hook-based replay, strength-1 evaluation, and balanced split-bank stability
+audit. All 22 Condor jobs exited successfully. Open the
+[steering curves](runs/emergence_lat_s46/figures/lat_steering.png) and
+[mean absolute cosine curves](runs/emergence_lat_s46/figures/lat_geometry.png).
+
+LAT preserves strong final steering with calibrated strength, but **does not
+make the latent axes more orthogonal than the mean directions** in this run.
 
 Local artifacts: `runs/emergence_lat_s46/`.
 Cluster artifacts: `/fast/fdraye/toy_model_linear/emergence_lat_s46/`.
@@ -77,8 +79,10 @@ the previous full-support means did; all held-out paths remain excluded.
 Both Brier gain and actual edited endpoint accuracy are saved. Exact activation
 patches, norm-matched random edits, full-support DoM at LAT-selected locations,
 and means of the same contrast bag at those locations are retained as controls.
-The original DoM baseline used strength 1; therefore a separately selected
-strength-1 LAT replay is implemented to make that comparison clearer.
+The original DoM baseline used strength 1; a separately selected strength-1 LAT
+replay is included to make that comparison clearer. Unit-strength locations
+are selected independently from the saved calibration grid restricted to alpha
+1, then evaluated on the same fixed held-out pairs.
 
 ## Geometry metric
 
@@ -92,14 +96,20 @@ means after subtracting the equal-weight global class mean, equivalent in
 direction to class-versus-balanced-rest DoM. All three methods use the same
 100 classes, depth, token, and cosine statistic.
 
-## Pilot observations (not the full trajectory)
+## Results
 
 At step 8000, mean LAT steering gain is 0.75337 and actual steering accuracy is
 85.02%. At step 20000, mean gain is **0.99836**, minimum target gain is 0.98881,
 and actual steering accuracy is **99.8918%** (24/32 targets have perfect measured
 accuracy; worst target 98.7013%). Original DoM final gain is 0.99624. The strength
 search differs: LAT selected alpha 1 for 18 targets and alpha 2 for 14 targets.
-Do not attribute that small gain difference solely to PCA.
+Do not attribute that small gain difference solely to PCA. LAT with strength
+fixed at 1 reaches final mean gain **0.97945** and accuracy **98.8095%**.
+
+LAT learns to steer later than the full-support DoM baseline over much of the
+transition: at 6000 their respective mean gains are 0.30889 and 0.44986; at 8000,
+0.75337 and 0.79641. The calibrated LAT and DoM means are both about 0.997 by
+16000. Checkpoint dips remain; no scores are smoothed or made monotone.
 
 Final mean absolute pairwise cosine:
 
@@ -112,43 +122,73 @@ Final mean absolute pairwise cosine:
 | 5 | 0.11709 | 0.11042 | 0.11067 |
 | 6 | 0.11958 | 0.11176 | 0.11201 |
 
-In this pilot, LAT preserves strong steering but **does not reduce inter-class
-angular overlap**. Finite-pair estimator stability will be checked with two
-balanced halves of the contrast bank in the pending audit. PCA maximizes
+LAT preserves strong steering but **does not reduce inter-class angular
+overlap**. The difference is also present against the mean of the identical
+contrast bag, so it is not explained simply by comparing 792 pairs with the
+larger full-support mean estimate. PCA maximizes
 contrast energy, which does not mathematically guarantee removal of surviving
 parent information or orthogonality.
+
+Early in training, the LAT axes are almost parallel across classes (mean
+absolute cosine near 1 at 1000–2000). This is consistent with the leading
+contrast component capturing variation common to many classes; these plots
+alone do not identify which information causes it.
 
 ## Validation and execution
 
 Three local tests passed: comparison with exact eigenvectors, constant/zero
-contrasts, and sign-invariance of intervention scale. The two pilot jobs passed
-all per-depth eigen-residual checks and independent exact top-eigenvalue spot
-checks. Maximum eigen residual is 8.97e-7, maximum eigenvalue spot-check error
-7.15e-7. Maximum Brier generalization difference versus the previous bfloat16
-evaluation is 0.000833; this replay uses FP32 forwards throughout.
+contrasts, and sign-invariance of intervention scale. All 147 checkpoint/depth
+fits passed eigen-residual checks and independent exact top-eigenvalue spot
+checks. Maximum eigen residual is 6.49e-6, maximum eigenvalue spot-check error
+8.35e-7. Maximum Brier generalization difference versus the previous bfloat16
+evaluation is 0.002378; this replay uses FP32 forwards throughout. The precision
+difference is another reason not to interpret tiny differences from the old
+baseline as a clean estimator improvement.
 
 Pilot jobs: **17567588.0** (8000, g197), **17567588.1** (20000, g191), both NVIDIA
 H100, both successful, about 20 seconds per checkpoint. Full jobs:
-**17567599.0–18**, exact step mapping in `submit_lat_full.sub`.
+**17567599.0–18**, exact step mapping in `submit_lat_full.sub`. Compute hosts were
+g188, g191, g197, and g205, all H100s. Total measured checkpoint runtime was
+419.74 GPU-job seconds; the independent audit added 16.1 seconds.
 
-The additional `audit_lat_replay.py` independently recomputes held-out edits
-using intervention hooks, selects strength-1 locations from saved calibration
-scores, and checks final axes on balanced split-half contrast banks. It requires
-all 21 completed results before submission with `submit_lat_audit.sub`.
+`audit_lat_replay.py`, Condor **17569242.0** on g187's H100, independently
+recomputed all selected held-out edits using intervention hooks. Its gains and
+accuracies match the cached-activation replay exactly at all 21 checkpoints.
+It also evaluated independently selected strength-1 locations.
 
-## Reproduction and resumption
+At the final checkpoint, the bank was split into two disjoint sets of contrast
+pairs, four against each negative class (396 contrasts per half). Individual
+paths can occur in both halves; this is a pairing-sensitivity check, not an
+independent-dataset confidence interval. At the third token:
 
-1. Restore normal access to the cluster public hostname.
-2. Check the cluster clone is clean. Sync local commit `6768cf6` or its descendant
-   before submitting the audit; the cluster was last at `749ffe8`.
-3. Verify all 21 `step*/history.json` files are complete and inspect failed-job
-   logs if any. Do not overwrite existing completed output directories.
-4. Submit `condor_submit_bid 2000 submit_lat_audit.sub` after syncing the code.
-5. Download outputs to `runs/emergence_lat_s46/` and run:
+| Block | Median half-to-half absolute cosine | Minimum | Median half-to-full |
+|---|---:|---:|---:|
+| 1 | 0.99271 | 0.97212 | 0.99813 |
+| 2 | 0.99824 | 0.98817 | 0.99958 |
+
+## Reproduction and artifacts
+
+The fixed contrast bank is made by `prepare_lat_bank.py`. `run_lat.sh` executes
+`scan_lat.py` on allocated GPUs; `submit_lat_pilot.sub` and `submit_lat_full.sub`
+specify all 21 original model checkpoints. Use fresh output directories for a
+new experiment, rather than overwriting completed results.
+
+To regenerate the downloaded plots locally:
 
        python3 plot_lat.py runs/emergence_lat_s46 \
          --means-run runs/emergence_large_locations_s46
 
-Plotting requires 21 completed checkpoints by default. `--expected-checkpoints 2`
-was used only to inspect the pilot, not to represent a completed trajectory.
-The local summary currently describes those two pilot checkpoints.
+Plotting requires 21 completed checkpoints by default and incorporates the
+completed `audit.json`. The local `summary.json` describes the full trajectory.
+
+Per-checkpoint directories contain `history.json` (calibration grid, selected
+locations, test gains, true steering accuracies, controls, eigen diagnostics)
+and `directions.pt` (axes, scaled class codes, means of contrast pairs, explained
+energy, selected interventions). `contrast_bank.pt` contains the fixed path IDs.
+
+`figures/steering_curves.csv` and `figures/geometry.csv` are directly readable
+plotting tables. `figures/geometry.npz` contains all 100-by-100 cosine matrices
+and explained-energy arrays, with axes checkpoint/block/class/class, blocks
+1–6, and class IDs ordered as in the checkpoint histories. The accuracy and
+control PNG/PDF files accompany the two headline plots. The explicitly named
+`lat_pilot_final_geometry` figure is retained as a final-checkpoint bar chart.

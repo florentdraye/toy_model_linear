@@ -35,6 +35,14 @@ Not tracked: `runs/`, `logs/`, `__pycache__/`, `.claude/`, and any `*.pt` / `*.p
 
 ### Focused latent-frequency / steering experiment
 
+The [LAT comparison](LAT_RESULTS.md) extracts leading principal directions from
+balanced contrastive pairs for all 100 latents, then evaluates steering on the
+same 32-target held-out bank over 21 original-model checkpoints. Calibrated LAT
+reaches 0.99836 final mean gain, but does not reduce mean absolute inter-latent
+cosine compared with DoM. See the
+[steering curves](runs/emergence_lat_s46/figures/lat_steering.png) and
+[geometry comparison](runs/emergence_lat_s46/figures/lat_geometry.png).
+
 The [kernel batch-count experiment](KERNEL_BATCH_COUNTS_RESULTS.md) tests how
 changing training examples affects a fixed reference while preserving exact
 latent counts. All 32 latents have before/midpoint/after scatter plots, using
