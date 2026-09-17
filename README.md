@@ -35,6 +35,12 @@ Not tracked: `runs/`, `logs/`, `__pycache__/`, `.claude/`, and any `*.pt` / `*.p
 
 ### Focused latent-frequency / steering experiment
 
+The [dense ten-seed DoM replication](DOM_MULTISEED.md) uses the original
+width-512 model, seeds 46–55, 32 latents, and measurements every 100 steps.
+Run `python3 collect_dom_multiseed.py` to fetch raw cluster histories and
+regenerate local plots, seed uncertainty, and CSV/NPZ data under
+`runs/dom_multiseed_summary/`. Incomplete plots are explicitly provisional.
+
 The [LAT comparison](LAT_RESULTS.md) extracts leading principal directions from
 balanced contrastive pairs for all 100 latents, then evaluates steering on the
 same 32-target held-out bank over 21 original-model checkpoints. Calibrated LAT

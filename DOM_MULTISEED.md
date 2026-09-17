@@ -38,6 +38,21 @@ steps, and a resumable optimizer/sampler checkpoint. Re-run with `--resume`
 to recover an interrupted seed. Local raw histories and plots are collected
 under `runs/dom_multiseed_summary/`.
 
+Submitted as **17571550.0–9**. The first runs started on g198/g205 with NVIDIA
+H100 GPUs. Fetch results and generate plots with `python3 collect_dom_multiseed.py`.
+The collector waits for measurements from all ten seeds, then plots only their
+common checkpoints. Incomplete trajectories are prominently provisional.
+
+`plot_dom_multiseed.py` writes the 32 mean steering/generalization curves,
+all individual seeds, a 32-latent PDF atlas, and raw `curves.csv` / `curves.npz`.
+The overview uses pointwise 95% percentile intervals from 4,000 bootstrap
+resamples of whole model seeds (fixed bootstrap seed 914). The paired gap uses
+the same seed resamples. Atlas bands instead show ±1 across-seed standard
+deviation. Neither interval includes graph or evaluation-bank uncertainty.
+NPZ arrays are `[seed, checkpoint, latent]`; the JSON summary names axes and
+records bank hashes and per-seed final metrics. CSV has one row per
+seed/checkpoint/latent, including selected depth/token positions.
+
 The primary aggregation gives every seed equal weight. Uncertainty describes
 model-seed variation with the graph and evaluation bank held fixed. Individual
 seed curves must accompany means; weak runs are retained. This protocol tests
