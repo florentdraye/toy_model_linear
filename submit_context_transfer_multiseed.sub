@@ -13,7 +13,7 @@ output = /fast/fdraye/toy_model_linear/logs/context_transfer_multiseed_$(Cluster
 error = /fast/fdraye/toy_model_linear/logs/context_transfer_multiseed_$(Cluster).$(Process).err
 log = /fast/fdraye/toy_model_linear/logs/context_transfer_multiseed_$(Cluster).$(Process).log
 queue seed, latent from (
-+47 92
+47 92
 47 41
 47 78
 47 79
