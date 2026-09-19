@@ -52,7 +52,8 @@ def save(fig, stem):
 
 
 def count_plot(rows, out, freq, norm, cmap):
-    eta = max(r["eta"] for r in rows); data = [r for r in rows if r["eta"] == eta]
+    # The smaller saved step is the declared linear-regime actual-update curve.
+    eta = min(r["eta"] for r in rows); data = [r for r in rows if r["eta"] == eta]
     stages = [x for x in ("before", "during", "after") if any(r["stage"] == x for r in data)]
     fig, axes = plt.subplots(2, len(stages), figsize=(4.2*len(stages), 6.6), sharex=True)
     for col, stage in enumerate(stages):

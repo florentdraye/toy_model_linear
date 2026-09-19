@@ -1,0 +1,160 @@
+universe = vanilla
+executable = /bin/bash
+arguments = run_context_transfer.sh $(seed) $(latent)
+initialdir = /lustre/home/fdraye/projects/toy_model_linear
+request_gpus = 1
+request_cpus = 4
+request_memory = 24 GB
+requirements = (CUDACapability == 9.0) && (Machine =!= "i101.internal.cluster.is.localnet") && (Machine =!= "g155.internal.cluster.is.localnet") && (Machine =!= "i205.internal.cluster.is.localnet") && (Machine =!= "i207.internal.cluster.is.localnet") && (Machine =!= "i106.internal.cluster.is.localnet")
++IsDocker = False
+stream_output = True
+stream_error = True
+output = /fast/fdraye/toy_model_linear/logs/context_transfer_multiseed_$(Cluster).$(Process).out
+error = /fast/fdraye/toy_model_linear/logs/context_transfer_multiseed_$(Cluster).$(Process).err
+log = /fast/fdraye/toy_model_linear/logs/context_transfer_multiseed_$(Cluster).$(Process).log
+queue seed, latent from (
++47 92
+47 41
+47 78
+47 79
+47 97
+47 28
+47 7
+47 54
+47 5
+47 69
+47 38
+47 90
+47 48
+47 26
+47 23
+47 44
+48 92
+48 41
+48 78
+48 79
+48 97
+48 28
+48 7
+48 54
+48 5
+48 69
+48 38
+48 90
+48 48
+48 26
+48 23
+48 44
+49 92
+49 41
+49 78
+49 79
+49 97
+49 28
+49 7
+49 54
+49 5
+49 69
+49 38
+49 90
+49 48
+49 26
+49 23
+49 44
+50 92
+50 41
+50 78
+50 79
+50 97
+50 28
+50 7
+50 54
+50 5
+50 69
+50 38
+50 90
+50 48
+50 26
+50 23
+50 44
+51 92
+51 41
+51 78
+51 79
+51 97
+51 28
+51 7
+51 54
+51 5
+51 69
+51 38
+51 90
+51 48
+51 26
+51 23
+51 44
+52 92
+52 41
+52 78
+52 79
+52 97
+52 28
+52 7
+52 54
+52 5
+52 69
+52 38
+52 90
+52 48
+52 26
+52 23
+52 44
+53 92
+53 41
+53 78
+53 79
+53 97
+53 28
+53 7
+53 54
+53 5
+53 69
+53 38
+53 90
+53 48
+53 26
+53 23
+53 44
+54 92
+54 41
+54 78
+54 79
+54 97
+54 28
+54 7
+54 54
+54 5
+54 69
+54 38
+54 90
+54 48
+54 26
+54 23
+54 44
+55 92
+55 41
+55 78
+55 79
+55 97
+55 28
+55 7
+55 54
+55 5
+55 69
+55 38
+55 90
+55 48
+55 26
+55 23
+55 44
+)
