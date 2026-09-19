@@ -1,5 +1,38 @@
 # Cross-context loss-transfer measurements
 
+## Corrected locally reachable context test
+
+The original broad source pairs below allowed the graph-layer-2 parent to
+change when graph-layer-3 latent `92` was inserted. A denser corrected test
+removes that confound. Every probe-batch point first reaches one of the eight
+reachable layer-2 parents with an edge to latent `92`. Its absent/present pair
+shares the entire prefix through that parent, changes only the next local edge
+so the graph-layer-3 node becomes `92`, and shares all later edge choices.
+Each 128-point background contains exactly 16 points from every eligible
+parent. The pool has 7,182 distinct training-supported pairs.
+
+Across ten model seeds and every saved 100-step checkpoint, relative context
+variation falls from 0.646 at initialization to a minimum of **0.317 at step
+2,500**, precisely during acquisition (mean generalization gain 0.301). The
+mean extra benefit is then strongly positive (49.0; RMS magnitude 85.6).
+Variation rises again after acquisition; at step 10,000 it is 0.582, while the
+RMS transfer signal has collapsed to 0.038 and generalization is 0.996. Thus
+the clean result is a sharp context-independence transition during emergence,
+followed by a late normalized ratio computed on a nearly exhausted loss signal.
+
+The unsmoothed figure and compact data are under
+`runs/context_variation_localparent_dense_summary/`. Recreate them with:
+
+```bash
+python3 plot_context_variation_dense.py \
+  runs/context_variation_localparent_dense_s{46,47,48,49,50,51,52,53,54,55} \
+  --out-dir runs/context_variation_localparent_dense_summary \
+  --histories runs/emergence_optimized16_summary/seed_{46,47,48,49,50,51,52,53,54,55}/history.json
+```
+
+The remaining sections document the earlier, less controlled broad-context
+experiment and should not be used for the locally reachable claim.
+
 This experiment measures whether learning from examples containing a selected
 graph-layer-3 latent helps held-out examples containing the same latent,
 independently of the surrounding path context. It uses the raw width-128,

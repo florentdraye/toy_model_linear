@@ -37,11 +37,12 @@ Not tracked: `runs/`, `logs/`, `__pycache__/`, `.claude/`, and any `*.pt` / `*.p
 
 The [cross-context loss-transfer study](CONTEXT_TRANSFER_RESULTS.md) measures
 actual and first-order held-out loss transfer versus exact latent count at the
-complete post-block-1 boundary. Ten seeds and all 16 optimized latents show a
-stable positive count effect, but substantial fixed-count context variation;
-the stronger count-sufficiency prediction does not hold in this measurement.
+complete post-block-1 boundary. A corrected dense test for the highest-frequency
+target constrains every probe point to a parent that can reach that latent and
+changes only the next graph edge. Its context variation drops sharply during
+acquisition across ten seeds and 101 checkpoints.
 Open the [ten-seed count curves](runs/context_transfer_multiseed_summary/count_transfer_multiseed.png)
-and [context-variation curves](runs/context_transfer_multiseed_summary/context_variation_multiseed.png).
+and [dense locally reachable context curve](runs/context_variation_localparent_dense_summary/dense_context_variation.png).
 
 The [optimized 16-latent replication](OPTIMIZED16_RESULTS.md) reproduces the
 successful supervised steering setup after removing its two highest-frequency
