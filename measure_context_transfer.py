@@ -84,6 +84,8 @@ def main():
     p.add_argument("--time-every", type=int, default=500)
     p.add_argument("--agreement-bank", type=int, default=8)
     p.add_argument("--eta", type=float, nargs="+", default=[0.001, 0.0002])
+    p.add_argument("--variation-only", action="store_true",
+                   help="measure fixed-count q(S) only; useful for dense checkpoint scans")
     a = p.parse_args()
     if not torch.cuda.is_available():
         raise RuntimeError("submit this measurement to a GPU compute node")
@@ -125,7 +127,7 @@ def main():
         stages.append({"stage": name, "target_gain": target, "step": row["step"],
                        "gain": row["gain_raw"][li]})
     time_steps = sorted({r["step"] for r in trajectory if r["step"] % a.time_every == 0}
-                        | {s["step"] for s in stages})
+                        | (set() if a.variation_only else {s["step"] for s in stages}))
     stage_by_step = {s["step"]: s for s in stages}
 
     a.out_dir.mkdir(parents=True)
@@ -137,7 +139,7 @@ def main():
         "task_loss": "100-class endpoint cross entropy", "batch_size": a.batch_size,
         "counts": a.counts, "fixed_m": fixed_m, "backgrounds": a.backgrounds,
         "count_repeats": a.count_repeats, "variation_repeats": a.variation_repeats,
-        "eval_ids": eval_ids.tolist(), "eta": a.eta,
+        "eval_ids": eval_ids.tolist(), "eta": a.eta, "variation_only": a.variation_only,
         "stages": stages, "time_steps": time_steps, "paired_source_rule":
         "switch absent/present training paths with identical suffix edge choices",
         "control_rule": "training paths sharing no internal graph node with the evaluation path",
@@ -170,53 +172,56 @@ def main():
                 diff = tree_difference(batch_grad, zero_grad)
                 td = transfer(model, params, eval_edges, diff)
                 q = (eval_g.double() * td.double()).flatten(1).sum(1)
-                tb = transfer(model, params, eval_edges, batch_grad)
-                cos, dot, gn, tn = cosine_rows(eval_g, tb)
+                if not a.variation_only:
+                    tb = transfer(model, params, eval_edges, batch_grad)
+                    cos, dot, gn, tn = cosine_rows(eval_g, tb)
                 for ei, eid in enumerate(eval_ids.tolist()):
                     variation_rows.append(dict(seed=metadata["seed"], step=step, latent=a.latent,
                         eval_id=eid, background=bg, subset=repeat, m=fixed_m, q=float(q[ei]),
                         subset_slots=";".join(map(str, chosen.tolist()))))
-                    alignment_rows.append(dict(seed=metadata["seed"], step=step, latent=a.latent,
-                        eval_id=eid, source="shared_latent_batch", background=bg, subset=repeat,
-                        cosine=float(cos[ei]), dot=float(dot[ei]), g_norm=float(gn[ei]),
-                        transfer_norm=float(tn[ei])))
+                    if not a.variation_only:
+                        alignment_rows.append(dict(seed=metadata["seed"], step=step, latent=a.latent,
+                            eval_id=eid, source="shared_latent_batch", background=bg, subset=repeat,
+                            cosine=float(cos[ei]), dot=float(dot[ei]), g_norm=float(gn[ei]),
+                            transfer_norm=float(tn[ei])))
 
         # Individual-contribution agreement. Reference and measurement banks are disjoint.
-        target_ref_grads = [source_gradient(model, params, edges[j:j+1].to(device),
+        if not a.variation_only:
+            target_ref_grads = [source_gradient(model, params, edges[j:j+1].to(device),
                             labels[j:j+1].to(device)) for j in target_reference.tolist()]
-        target_measure_grads = [source_gradient(model, params, edges[j:j+1].to(device),
+            target_measure_grads = [source_gradient(model, params, edges[j:j+1].to(device),
                                 labels[j:j+1].to(device)) for j in target_measure.tolist()]
-        for ei, eid in enumerate(eval_ids.tolist()):
-            one_edge = eval_edges[ei:ei+1]
-            tref = torch.stack([transfer(model, params, one_edge, d)[0] for d in target_ref_grads]).mean(0)
-            control_ids = controls[eid]
-            control_ref_grads = [source_gradient(model, params, edges[j:j+1].to(device),
+            for ei, eid in enumerate(eval_ids.tolist()):
+                one_edge = eval_edges[ei:ei+1]
+                tref = torch.stack([transfer(model, params, one_edge, d)[0] for d in target_ref_grads]).mean(0)
+                control_ids = controls[eid]
+                control_ref_grads = [source_gradient(model, params, edges[j:j+1].to(device),
                                  labels[j:j+1].to(device)) for j in control_ids[:a.agreement_bank].tolist()]
-            control_measure_grads = [source_gradient(model, params, edges[j:j+1].to(device),
+                control_measure_grads = [source_gradient(model, params, edges[j:j+1].to(device),
                                      labels[j:j+1].to(device)) for j in control_ids[a.agreement_bank:].tolist()]
-            cref = torch.stack([transfer(model, params, one_edge, d)[0] for d in control_ref_grads]).mean(0)
-            for group, ids0, grads0, ref in (("shared_latent", target_measure.tolist(), target_measure_grads, tref),
+                cref = torch.stack([transfer(model, params, one_edge, d)[0] for d in control_ref_grads]).mean(0)
+                for group, ids0, grads0, ref in (("shared_latent", target_measure.tolist(), target_measure_grads, tref),
                                              ("no_shared_latent", control_ids[a.agreement_bank:].tolist(),
                                               control_measure_grads, cref)):
-                for source_id, direction in zip(ids0, grads0):
-                    tij = transfer(model, params, one_edge, direction)[0]
-                    cos, dot, tn, mn = cosine_rows(tij[None], ref[None])
-                    agreement_rows.append(dict(seed=metadata["seed"], step=step, latent=a.latent,
-                        eval_id=eid, source_id=source_id, source=group, cosine=float(cos[0]),
-                        dot=float(dot[0]), transfer_norm=float(tn[0]), mean_norm=float(mn[0])))
+                    for source_id, direction in zip(ids0, grads0):
+                        tij = transfer(model, params, one_edge, direction)[0]
+                        cos, dot, tn, mn = cosine_rows(tij[None], ref[None])
+                        agreement_rows.append(dict(seed=metadata["seed"], step=step, latent=a.latent,
+                            eval_id=eid, source_id=source_id, source=group, cosine=float(cos[0]),
+                            dot=float(dot[0]), transfer_norm=float(tn[0]), mean_norm=float(mn[0])))
 
-            # A genuinely no-shared-latent batch control for useful alignment.
-            cids = control_ids[:a.agreement_bank]
-            cg = source_gradient(model, params, edges[cids].to(device), labels[cids].to(device))
-            ct = transfer(model, params, one_edge, cg)
-            cc, cd, cgn, ctn = cosine_rows(eval_g[ei:ei+1], ct)
-            alignment_rows.append(dict(seed=metadata["seed"], step=step, latent=a.latent,
-                eval_id=eid, source="no_shared_latent", background=-1, subset=-1,
-                cosine=float(cc[0]), dot=float(cd[0]), g_norm=float(cgn[0]),
-                transfer_norm=float(ctn[0])))
+                # A genuinely no-shared-latent batch control for useful alignment.
+                cids = control_ids[:a.agreement_bank]
+                cg = source_gradient(model, params, edges[cids].to(device), labels[cids].to(device))
+                ct = transfer(model, params, one_edge, cg)
+                cc, cd, cgn, ctn = cosine_rows(eval_g[ei:ei+1], ct)
+                alignment_rows.append(dict(seed=metadata["seed"], step=step, latent=a.latent,
+                    eval_id=eid, source="no_shared_latent", background=-1, subset=-1,
+                    cosine=float(cc[0]), dot=float(cd[0]), g_norm=float(cgn[0]),
+                    transfer_norm=float(ctn[0])))
 
         # Actual and first-order transfer at the three acquisition stages.
-        if step in stage_by_step:
+        if not a.variation_only and step in stage_by_step:
             stage = stage_by_step[step]
             for bg in range(a.backgrounds):
                 for count in a.counts:
@@ -241,10 +246,11 @@ def main():
         print(json.dumps({"latent": a.latent, "step": step,
                           "elapsed_seconds": round(time.time() - start, 1)}), flush=True)
 
-    write_csv(a.out_dir / "count_transfer.csv", count_rows)
     write_csv(a.out_dir / "context_variation.csv", variation_rows)
-    write_csv(a.out_dir / "contribution_agreement.csv", agreement_rows)
-    write_csv(a.out_dir / "useful_alignment.csv", alignment_rows)
+    if not a.variation_only:
+        write_csv(a.out_dir / "count_transfer.csv", count_rows)
+        write_csv(a.out_dir / "contribution_agreement.csv", agreement_rows)
+        write_csv(a.out_dir / "useful_alignment.csv", alignment_rows)
     metadata["complete"] = True; metadata["elapsed_seconds"] = round(time.time() - start, 2)
     (a.out_dir / "metadata.json").write_text(json.dumps(metadata, indent=2) + "\n")
     print(json.dumps({"complete": True, "latent": a.latent,
