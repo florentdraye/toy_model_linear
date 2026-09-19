@@ -43,6 +43,8 @@ changes only the next graph edge. Its context variation drops sharply during
 acquisition across ten seeds and 101 checkpoints.
 Open the [ten-seed count curves](runs/context_transfer_multiseed_summary/count_transfer_multiseed.png)
 and [dense locally reachable context curve](runs/context_variation_localparent_dense_summary/dense_context_variation.png).
+The [natural-frequency subset scatter](runs/count_subset_scatter_l78_summary/count_subset_scatter.png)
+shows the full loss contraction versus count near gain 0.5.
 
 The [optimized 16-latent replication](OPTIMIZED16_RESULTS.md) reproduces the
 successful supervised steering setup after removing its two highest-frequency

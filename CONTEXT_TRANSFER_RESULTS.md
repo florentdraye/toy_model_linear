@@ -33,6 +33,31 @@ python3 plot_context_variation_dense.py \
 The remaining sections document the earlier, less controlled broad-context
 experiment and should not be used for the locally reachable claim.
 
+## Natural-frequency count scatter at gain 0.5
+
+Latent `78` is the tracked target closest to ordinary `1/100` frequency. Its
+training probability is 1.053%, giving an expected count of 21.6 in the real
+2,048-example training batch. For each seed, the experiment selects the
+checkpoint nearest generalization gain 0.5, fixes one 2,048-example batch whose
+points all arrive at one of the five reachable parents of latent `78`, and
+varies which examples take the next edge into `78`.
+
+The plotted scalar is the unnormalized loss contraction
+`q_i = g_i^T sum_j K_ij g_j`. Counts run from 0 through 64 in increments of 4,
+with 128 independently sampled subsets at every nonzero count. The same paths
+and subsets are used across ten model seeds, and four fixed held-out evaluation
+points are averaged only after computing their scalar contractions.
+
+The subset-mean extra transfer is nearly linear in count (`R^2 = 0.980`). Near
+the natural count, at `m=20`, its mean is 1,535.7 and its subset SD is 1,661.2.
+The corresponding `Var(q)/E(q^2)` is 0.539. Thus count strongly predicts the
+mean transfer, but at this acquisition point the identity of the examples in
+the subset remains comparably important.
+
+The figure and compact tables are under
+`runs/count_subset_scatter_l78_summary/`; raw per-seed tables are under
+`runs/count_subset_scatter_l78_s46` through `s55`.
+
 This experiment measures whether learning from examples containing a selected
 graph-layer-3 latent helps held-out examples containing the same latent,
 independently of the surrounding path context. It uses the raw width-128,
