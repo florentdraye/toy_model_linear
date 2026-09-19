@@ -35,6 +35,14 @@ Not tracked: `runs/`, `logs/`, `__pycache__/`, `.claude/`, and any `*.pt` / `*.p
 
 ### Focused latent-frequency / steering experiment
 
+The [cross-context loss-transfer study](CONTEXT_TRANSFER_RESULTS.md) measures
+actual and first-order held-out loss transfer versus exact latent count at the
+complete post-block-1 boundary. Ten seeds and all 16 optimized latents show a
+stable positive count effect, but substantial fixed-count context variation;
+the stronger count-sufficiency prediction does not hold in this measurement.
+Open the [ten-seed count curves](runs/context_transfer_multiseed_summary/count_transfer_multiseed.png)
+and [context-variation curves](runs/context_transfer_multiseed_summary/context_variation_multiseed.png).
+
 The [optimized 16-latent replication](OPTIMIZED16_RESULTS.md) reproduces the
 successful supervised steering setup after removing its two highest-frequency
 curves and filling the retained range with 16 latents. Ten model seeds give
