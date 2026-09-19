@@ -6,7 +6,7 @@ seed="$1"
 latent="$2"
 python_bin=/lustre/home/fdraye/projects/granularity/.venv/bin/python
 run="/fast/fdraye/toy_model_linear/emergence_optimized16_source_s${seed}"
-out="/fast/fdraye/toy_model_linear/context_transfer_s${seed}/latent_${latent}"
+out="/fast/fdraye/toy_model_linear/context_transfer_v2_s${seed}/latent_${latent}"
 hostname
 nvidia-smi --query-gpu=name,memory.total,driver_version --format=csv,noheader
 exec "$python_bin" -u measure_context_transfer.py --run "$run" --out-dir "$out" --latent "$latent"

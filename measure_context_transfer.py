@@ -78,11 +78,12 @@ def main():
     p.add_argument("--batch-size", type=int, default=128)
     p.add_argument("--counts", type=int, nargs="+", default=[0, 16, 32, 64, 96, 128])
     p.add_argument("--backgrounds", type=int, default=3)
-    p.add_argument("--repeats", type=int, default=4)
+    p.add_argument("--count-repeats", type=int, default=8)
+    p.add_argument("--variation-repeats", type=int, default=32)
     p.add_argument("--eval-points", type=int, default=4)
     p.add_argument("--time-every", type=int, default=500)
     p.add_argument("--agreement-bank", type=int, default=8)
-    p.add_argument("--eta", type=float, nargs="+", default=[0.01, 0.005])
+    p.add_argument("--eta", type=float, nargs="+", default=[0.001, 0.0002])
     a = p.parse_args()
     if not torch.cuda.is_available():
         raise RuntimeError("submit this measurement to a GPU compute node")
@@ -108,7 +109,8 @@ def main():
     edges, labels, nodes = paths["edge_seqs"], paths["labels"], paths["nodes"]
     eval_edges, eval_labels = edges[eval_ids].to(device), labels[eval_ids].to(device)
     rng = np.random.default_rng(19001 + 1009 * source["config"]["seed"] + a.latent)
-    fixed = matched_batches(pair_ids, a.batch_size, a.counts, a.backgrounds, a.repeats,
+    fixed_repeats = max(a.count_repeats, a.variation_repeats)
+    fixed = matched_batches(pair_ids, a.batch_size, a.counts, a.backgrounds, fixed_repeats,
                             21001 + a.latent)
     fixed_m = min(a.counts, key=lambda x: abs(x - a.batch_size // 2))
     target_reference = torch.as_tensor(pair_ids[:a.agreement_bank, 1])
@@ -134,7 +136,8 @@ def main():
         "token/position embeddings and transformer block 1", "downstream": "frozen blocks 2-6 and head",
         "task_loss": "100-class endpoint cross entropy", "batch_size": a.batch_size,
         "counts": a.counts, "fixed_m": fixed_m, "backgrounds": a.backgrounds,
-        "repeats": a.repeats, "eval_ids": eval_ids.tolist(), "eta": a.eta,
+        "count_repeats": a.count_repeats, "variation_repeats": a.variation_repeats,
+        "eval_ids": eval_ids.tolist(), "eta": a.eta,
         "stages": stages, "time_steps": time_steps, "paired_source_rule":
         "switch absent/present training paths with identical suffix edge choices",
         "control_rule": "training paths sharing no internal graph node with the evaluation path",
@@ -159,7 +162,7 @@ def main():
             zedges = edges[torch.as_tensor(zero_ids)].to(device)
             zlabels = labels[torch.as_tensor(zero_ids)].to(device)
             zero_grad = source_gradient(model, params, zedges, zlabels)
-            for repeat in range(a.repeats):
+            for repeat in range(a.variation_repeats):
                 ids, chosen = fixed[bg, fixed_m, repeat]
                 bedges = edges[torch.as_tensor(ids)].to(device)
                 blabels = labels[torch.as_tensor(ids)].to(device)
@@ -217,7 +220,7 @@ def main():
             stage = stage_by_step[step]
             for bg in range(a.backgrounds):
                 for count in a.counts:
-                    for repeat in range(a.repeats):
+                    for repeat in range(a.count_repeats):
                         ids, chosen = fixed[bg, count, repeat]
                         ids = torch.as_tensor(ids)
                         direction = source_gradient(model, params, edges[ids].to(device), labels[ids].to(device))
@@ -232,7 +235,7 @@ def main():
                                     eval_id=eid, count=count, background=bg, repeat=repeat, eta=eta,
                                     actual_loss_decrease=float(actual[ei]),
                                     predicted_loss_decrease=float(eta * contraction[ei]),
-                                    source_gradient_norm=float(sum(x.double().square().sum() for x in direction.values()).sqrt()),
+                                    source_gradient_norm=float(sum(x.double().square().sum() for x in direction.values()).sqrt().detach()),
                                     subset_slots=";".join(map(str, chosen.tolist()))))
 
         print(json.dumps({"latent": a.latent, "step": step,
