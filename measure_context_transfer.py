@@ -45,11 +45,22 @@ def losses(model, params, edges, labels):
                            labels, reduction="none")
 
 
-def matched_batches(pair_ids, n, counts, backgrounds, repeats, seed):
+def matched_batches(pair_ids, n, counts, backgrounds, repeats, seed, strata=None):
     rng = np.random.default_rng(seed)
     result = {}
     for bg in range(backgrounds):
-        slots = rng.choice(len(pair_ids), n, replace=False)
+        if strata is None:
+            slots = rng.choice(len(pair_ids), n, replace=False)
+        else:
+            values = np.unique(strata)
+            quotas = np.full(len(values), n // len(values)); quotas[:n % len(values)] += 1
+            quotas = np.roll(quotas, bg)
+            pieces = []
+            for value, quota in zip(values, quotas):
+                pool = np.flatnonzero(strata == value)
+                if len(pool) < quota: raise ValueError(f"insufficient pairs for parent {value}")
+                pieces.append(rng.choice(pool, int(quota), replace=False))
+            slots = np.concatenate(pieces); rng.shuffle(slots)
         off = pair_ids[slots, 0].copy(); on = pair_ids[slots, 1].copy()
         for count in counts:
             for repeat in range(repeats):
@@ -58,6 +69,40 @@ def matched_batches(pair_ids, n, counts, backgrounds, repeats, seed):
                 ids = off.copy(); ids[chosen] = on[chosen]
                 result[bg, count, repeat] = (ids, chosen)
     return result
+
+
+def locally_reachable_pairs(paths, train_ids, graph, layer, target, seed):
+    """Pairs differing only in the edge from a shared eligible parent.
+
+    Both paths share the complete prefix through layer-1 and the complete edge
+    suffix after layer. The present member takes the parent's edge to target;
+    the absent member takes another edge from that same parent. Both must be in
+    training support. One absent alternative is selected per present path.
+    """
+    edges, nodes = paths["edge_seqs"], paths["nodes"]
+    present = train_ids[nodes[train_ids, layer] == target]
+    radix, length, position = graph.edges_per_node, edges.shape[1], layer - 1
+    allowed = torch.zeros(len(edges), dtype=torch.bool); allowed[train_ids] = True
+    choices = torch.arange(radix)[None].expand(len(present), -1)
+    current = edges[present, position, None]
+    place = radix ** (length - position - 1)
+    absent_ids = present[:, None] + (choices - current) * place
+    valid = (choices != current) & allowed[absent_ids]
+    scores = torch.rand(valid.shape, generator=torch.Generator().manual_seed(seed))
+    scores[~valid] = float("inf")
+    keep = valid.any(1); selected = scores.argmin(1)
+    present, selected = present[keep], selected[keep]
+    absent = absent_ids[keep, selected]
+    pairs = torch.stack([absent, present], 1)
+    parent = nodes[present, layer - 1]
+    if not torch.equal(edges[absent, :position], edges[present, :position]):
+        raise AssertionError("local pairs do not share upstream prefix")
+    if not torch.equal(edges[absent, layer:], edges[present, layer:]):
+        raise AssertionError("local pairs do not share downstream edge choices")
+    if not bool((nodes[present, layer] == target).all() and
+                (nodes[absent, layer] != target).all()):
+        raise AssertionError("invalid target toggle")
+    return pairs.numpy(), parent.numpy()
 
 
 def no_shared_ids(train_ids, nodes, eval_id, number, rng):
@@ -86,6 +131,8 @@ def main():
     p.add_argument("--eta", type=float, nargs="+", default=[0.001, 0.0002])
     p.add_argument("--variation-only", action="store_true",
                    help="measure fixed-count q(S) only; useful for dense checkpoint scans")
+    p.add_argument("--pair-mode", choices=("legacy-reference", "local-parent"),
+                   default="legacy-reference")
     a = p.parse_args()
     if not torch.cuda.is_available():
         raise RuntimeError("submit this measurement to a GPU compute node")
@@ -105,7 +152,12 @@ def main():
         raise ValueError("expected post-block-1 steering")
     paths = enumerate_paths(Graph.load(a.run / "graph.pt"))
     banks = torch.load(a.run / "banks.pt", weights_only=True)
-    pair_ids = banks["fit"][li].numpy()
+    if a.pair_mode == "local-parent":
+        pair_ids, pair_parents = locally_reachable_pairs(
+            paths, banks["train"], Graph.load(a.run / "graph.pt"),
+            source["config"]["graph_layer"], a.latent, 20501 + a.latent)
+    else:
+        pair_ids, pair_parents = banks["fit"][li].numpy(), None
     eval_ids = banks["test"][li, :a.eval_points, 1]
     train_ids = banks["train"]
     edges, labels, nodes = paths["edge_seqs"], paths["labels"], paths["nodes"]
@@ -113,7 +165,7 @@ def main():
     rng = np.random.default_rng(19001 + 1009 * source["config"]["seed"] + a.latent)
     fixed_repeats = max(a.count_repeats, a.variation_repeats)
     fixed = matched_batches(pair_ids, a.batch_size, a.counts, a.backgrounds, fixed_repeats,
-                            21001 + a.latent)
+                            21001 + a.latent, pair_parents)
     fixed_m = min(a.counts, key=lambda x: abs(x - a.batch_size // 2))
     target_reference = torch.as_tensor(pair_ids[:a.agreement_bank, 1])
     target_measure = torch.as_tensor(pair_ids[a.agreement_bank:2*a.agreement_bank, 1])
@@ -140,6 +192,10 @@ def main():
         "counts": a.counts, "fixed_m": fixed_m, "backgrounds": a.backgrounds,
         "count_repeats": a.count_repeats, "variation_repeats": a.variation_repeats,
         "eval_ids": eval_ids.tolist(), "eta": a.eta, "variation_only": a.variation_only,
+        "pair_mode": a.pair_mode, "pair_pool_size": len(pair_ids),
+        "eligible_parents": (sorted(set(pair_parents.tolist())) if pair_parents is not None else None),
+        "pair_invariant": ("same prefix through parent; different parent outgoing edge; same suffix edges"
+                           if a.pair_mode == "local-parent" else "matched target/reference suffix"),
         "stages": stages, "time_steps": time_steps, "paired_source_rule":
         "switch absent/present training paths with identical suffix edge choices",
         "control_rule": "training paths sharing no internal graph node with the evaluation path",

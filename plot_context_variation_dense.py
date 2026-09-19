@@ -52,7 +52,8 @@ def main():
     axes[1].plot(x,qm,color="#31688e",lw=1.7);axes[1].fill_between(x,qm-qs,qm+qs,color="#31688e",alpha=.18,linewidth=0)
     axes[1].set_yscale("symlog",linthresh=1.);axes[1].axhline(0,color=".5",lw=.7);axes[1].set_ylabel("Mean extra benefit (symmetric log)")
     for ax in axes:ax.set_xlabel("Training step");ax.grid(alpha=.18)
-    fig.suptitle("Highest-frequency target latent 92 — every 100 steps, 10-seed mean\nRaw checkpoint estimates; bands are SD across model seeds")
+    fig.suptitle("Highest-frequency target latent 92 — locally reachable contexts, every 100 steps\n"
+                 "10-seed raw checkpoint mean; bands are SD across model seeds")
     fig.tight_layout()
     for suffix in ("png","pdf"):fig.savefig(a.out_dir/f"dense_context_variation.{suffix}",dpi=180 if suffix=="png" else None,bbox_inches="tight")
     print(json.dumps(dict(seeds=len(a.roots),checkpoints=len(summary),latent=92,
