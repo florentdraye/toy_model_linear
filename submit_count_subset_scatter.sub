@@ -1,0 +1,15 @@
+universe = vanilla
+executable = /bin/bash
+arguments = run_count_subset_scatter.sh $(seed)
+initialdir = /lustre/home/fdraye/projects/toy_model_linear
+request_gpus = 1
+request_cpus = 4
+request_memory = 32 GB
+requirements = (CUDACapability == 9.0) && (Machine =!= "i101.internal.cluster.is.localnet") && (Machine =!= "g155.internal.cluster.is.localnet") && (Machine =!= "i205.internal.cluster.is.localnet") && (Machine =!= "i207.internal.cluster.is.localnet") && (Machine =!= "i106.internal.cluster.is.localnet")
++IsDocker = False
+stream_output = True
+stream_error = True
+output = /fast/fdraye/toy_model_linear/logs/count_subset_scatter_$(Cluster).$(Process).out
+error = /fast/fdraye/toy_model_linear/logs/count_subset_scatter_$(Cluster).$(Process).err
+log = /fast/fdraye/toy_model_linear/logs/count_subset_scatter_$(Cluster).$(Process).log
+queue seed in 46,47,48,49,50,51,52,53,54,55
